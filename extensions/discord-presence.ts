@@ -2,12 +2,13 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import DiscordRPC from "discord-rpc";
 // Resolved by omp's loader to the running host, so this is the installed omp version, not a bundled copy.
 import { VERSION } from "@oh-my-pi/pi-utils";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { createConnection, createServer, type Server } from "node:net";
 import { homedir, release } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const CLIENT_ID = process.env.OMP_DISCORD_CLIENT_ID ?? "1566329796068384808";
 const LARGE_IMAGE_KEY = process.env.OMP_DISCORD_LARGE_IMAGE_KEY;
@@ -106,6 +107,26 @@ const fetchAppIconUrl = async (): Promise<string | undefined> => {
 	}
 };
 
+const execFileAsync = promisify(execFile);
+// Captures owner/repo from https, ssh and scp-style remotes; credentials before the host are never captured.
+const GITHUB_REMOTE = /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/;
+
+/** The public GitHub URL of cwd's `origin` remote, if any. */
+const findPublicGithubRepo = async (cwd: string): Promise<string | undefined> => {
+	try {
+		const { stdout } = await execFileAsync("git", ["-C", cwd, "remote", "get-url", "origin"]);
+		const slug = GITHUB_REMOTE.exec(stdout.trim())?.[1];
+		if (!slug) return undefined;
+		// Only link public repos: a private repo's URL would leak its owner/name to everyone viewing the profile.
+		const response = await fetch(`https://api.github.com/repos/${slug}`, {
+			headers: { "User-Agent": "omp-discord-presence" },
+		});
+		return response.ok ? `https://github.com/${slug}` : undefined;
+	} catch {
+		return undefined; // not a git repo, no origin, git missing, or offline
+	}
+};
+
 // WSL: Discord runs on Windows and only exposes a named pipe, so serve the Unix socket discord-rpc looks for
 // and relay each connection through the bundled npiperelay.exe. Path logic mirrors discord-rpc's ipc transport.
 const IS_WSL = process.platform === "linux" && (!!process.env.WSL_DISTRO_NAME || /microsoft/i.test(release()));
@@ -165,6 +186,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let connected = false;
 	let reconnectTimer: NodeJS.Timeout | undefined;
 	let appIconUrl: string | undefined;
+	let repoUrl: string | undefined;
 	let wslBridge: Server | undefined;
 	let updateTimer: NodeJS.Timeout | undefined;
 	let stateWatcher: FSWatcher | undefined;
@@ -200,7 +222,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	const buildActivity = (): DiscordRPC.Presence => {
 		const model = presence.model && `${presence.model.provider}/${presence.model.id}`;
-		const modelSuffix = model ? ` · ${model}` : "";
+		const effort = pi.getThinkingLevel();
+		const modelInfo = model && (effort && effort !== "inherit" ? `${model} · effort: ${effort}` : model);
+		const modelSuffix = modelInfo ? ` · ${modelInfo}` : "";
 		const state = presence.toolName
 			? `${presence.state} · ${presence.toolName}${modelSuffix}`
 			: `${presence.state}${modelSuffix}`;
@@ -208,7 +232,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const provider = presence.model?.provider.toLowerCase() ?? "";
 		const brand =
 			BRAND_ICONS.find(([pattern]) => pattern.test(id)) ?? BRAND_ICONS.find(([pattern]) => pattern.test(provider));
-		const project = projectHidden() ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
+		const hidden = projectHidden();
+		const project = hidden ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
 		const largeImageKey = LARGE_IMAGE_KEY ?? appIconUrl;
 
 		return {
@@ -218,7 +243,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 			largeImageKey,
 			largeImageText: largeImageKey ? `oh-my-pi coding agent v${VERSION}` : undefined,
 			smallImageKey: brand?.[1],
-			smallImageText: brand && model,
+			smallImageText: brand && modelInfo,
+			// Discord never shows your own buttons to you; other people see them on your profile.
+			buttons: repoUrl && !hidden ? [{ label: "View on GitHub", url: repoUrl }] : undefined,
 			instance: false,
 		};
 	};
@@ -394,6 +421,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 		if (!LARGE_IMAGE_KEY && !appIconUrl) void fetchAppIconUrl().then((url) => {
 			appIconUrl = url;
 			schedulePresenceUpdate();
+		});
+		repoUrl = undefined;
+		void findPublicGithubRepo(ctx.cwd).then((url) => {
+			repoUrl = url;
+			if (url) schedulePresenceUpdate();
 		});
 		if (enabled) void connect();
 	});

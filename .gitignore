@@ -3,4 +3,4 @@ dist/
 .omp/
 *.log
 .DS_Store
-div/
+dev/

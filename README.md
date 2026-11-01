@@ -2,13 +2,24 @@
 
 Discord Rich Presence extension for omp (oh-my-pi) coding agent.
 
-Discord shows the installed omp version, the project name, the current state (idle / thinking / using tool), the active tool, and the model, with the model maker's logo as a small badge:
+Discord shows the installed omp version, the project name, the current state (idle / thinking / using tool), the active tool, the model and its effort (thinking level), with the model maker's logo as a small badge:
 
 ```text
 OH MY PI
 omp v18.15.0 · my-project
-using tool · bash · anthropic/claude-opus-4
+using tool · bash · anthropic/claude-opus-4 · effort: high
+[ View on GitHub ]
 ```
+
+The effort is read whenever the status updates, so a change appears with the next prompt.
+
+### GitHub button
+
+When the project is a git repository whose `origin` remote points to a **public** GitHub repo, the status gets a **View on GitHub** button linking to it.
+
+- **When there's no button:** non-GitHub remotes, private repos and folders without git get none. Visibility is checked once per session with an anonymous GitHub API request, so a private repo's owner/name is never published.
+- **Hidden projects:** `/discord-presence hide` removes the button too.
+- **Your own view:** Discord never shows your own activity buttons to you. Other people see them on your profile.
 
 Works out of the box on Windows, macOS, Linux and WSL. No Discord setup, relay, or `socat` needed on the user's side.
 
