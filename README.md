@@ -11,7 +11,7 @@ using tool · bash · anthropic/claude-opus-4 · effort: high
 [ View on GitHub ]
 ```
 
-Status changes reach Discord within about 4 seconds. Updates are spaced out because Discord accepts only 5 activity updates per 20 seconds, and the latest state is always sent last. While tools run in parallel, the status stays on "using tool" until the last one finishes. Automatic context compaction and provider retries get their own status (`compacting context`, `retrying · attempt 2/5`). The retry's error message is never shown. The effort is read whenever the status updates, so a change appears with the next prompt.
+Status changes reach Discord within about 4 seconds. Updates are spaced out because Discord accepts only 5 activity updates per 20 seconds, and the latest state is always sent last. While tools run in parallel, the status stays on "using tool" until the last one finishes. Automatic context compaction and provider retries get their own status (`compacting context`, `retrying · attempt 2/5`). The retry's error message is never shown. The model and effort follow the selection in the omp session: a switch (`/model`, the model picker, ⇧⇥ for effort) shows within a few seconds, even without a prompt.
 
 Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
 
@@ -59,7 +59,7 @@ npm login
 npm publish
 ```
 
-The package ships only `extensions/`, `bin/` and `assets/`, about 0.9 MB. `@oh-my-pi/pi-coding-agent` is an optional peer, so installing the plugin doesn't pull a second copy of omp.
+The package ships only `extensions/`, `bin/` and `assets/`, about 1.3 MB. `@oh-my-pi/pi-coding-agent` is an optional peer, so installing the plugin doesn't pull a second copy of omp.
 
 Only the main session talks to Discord; subagent sessions (task tool, eval agents) never connect and only report how many of them are running.
 
@@ -106,8 +106,8 @@ flowchart TD
 
     subgraph inputs["read when building"]
         V["omp version"]
-        M["model + effort"]
-        L["brand logo key"]
+        M["live model + effort<br/>(polled every 3 s)"]
+        L["lobe-icons logo key"]
         G["public GitHub URL<br/>(git origin + GitHub API)"]
     end
 
@@ -225,15 +225,29 @@ The activity title ("OH MY PI") is the application name in the Discord Developer
 ### Images
 
 - **Large image:** the application's own icon, fetched from Discord at startup.
-- **Small image:** the logo of the model's maker (Claude, OpenAI, Gemini, DeepSeek, xAI, Mistral, Qwen, Moonshot, Zhipu, MiniMax, Meta), chosen from omp's active model. The plugin matches on the model id first, so Claude through OpenRouter or Copilot still shows the Claude logo. If that fails, it falls back to the provider (OpenRouter, GitHub Copilot, Ollama, Groq, Cerebras, Bedrock). Hover the logo to see the full model name. Unknown models show no small image. A model switch shows up when the next prompt starts.
+- **Small image:** the logo for the model selected in the omp session, from [lobe-icons](https://github.com/lobehub/lobe-icons). The plugin uses lobe's own model rules (`modelMappings`) in lobe's order, matched against the model id, so Claude through OpenRouter, Copilot or a gateway still shows the Claude logo. If no model rule matches, lobe's provider rules (`providerMappings`) are tried. Hover the logo to see the model and effort. Models without a logo show no small image.
 
-The logos live in `assets/models/` (640×640 PNGs from [`@lobehub/icons-static-png`](https://www.npmjs.com/package/@lobehub/icons-static-png), MIT). Discord can't read local files, so upload them once as Art Assets:
+The logos live in `assets/models/` (PNGs from [`@lobehub/icons-static-png`](https://www.npmjs.com/package/@lobehub/icons-static-png), MIT; the colored variant when lobe has one). Discord can't read local files, so upload them as Art Assets:
 
 1. Open the [Developer Portal](https://discord.com/developers/applications), select the app, then go to **Rich Presence → Art Assets**.
-2. Click **Add Image(s)** and select every file in `assets/models/`.
-3. Keep each asset name equal to its file name without `.png` (for example `claude`, `githubcopilot`), then **Save Changes**.
+2. Click **Add Image(s)** and select the files listed by the sync script below (the first time: every file in `assets/models/`).
+3. Keep each asset name equal to its file name without `.png` (for example `claude`, `deepseek`), then **Save Changes**. New assets can take a few minutes to appear.
 
-New assets can take a few minutes to appear. To add a brand, put `<key>.png` (at least 512×512) in `assets/models/`, add a `[/pattern/, "<key>"]` row to `BRAND_ICONS` in `extensions/discord-presence.ts`, and upload the image.
+#### Updating the logos
+
+`extensions/model-icons.generated.ts` and `assets/models/` are generated. Don't edit them by hand. Regenerate them after bumping `LOBE_ICONS_VERSION` / `STATIC_PNG_VERSION` in `scripts/sync-model-icons.ts`, or after updating `@oh-my-pi/pi-catalog` to pick up new omp models:
+
+```bash
+pnpm sync-icons
+```
+
+The script:
+
+1. Reads lobe's `modelMappings` / `providerMappings` from `@lobehub/icons` (pinned version).
+2. Resolves every model in omp's bundled catalog (`@oh-my-pi/pi-catalog`), the same way the extension does.
+3. Downloads one PNG per icon those models use into `assets/models/`.
+4. Writes the rules in lobe's order. Rules whose logo isn't shipped map to `null`: no badge rather than a wrong one.
+5. Compares the result with the application's public Art Asset list and prints which keys to **upload** and which to **delete** in the portal.
 
 ### Environment overrides
 

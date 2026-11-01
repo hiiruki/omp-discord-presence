@@ -19,12 +19,14 @@
   ],
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "lint": "oxlint extensions"
+    "lint": "oxlint extensions scripts",
+    "sync-icons": "bun scripts/sync-model-icons.ts"
   },
   "dependencies": {
     "discord-rpc": "^4.0.1"
   },
   "devDependencies": {
+    "@oh-my-pi/pi-catalog": "^18.14.2",
     "@oh-my-pi/pi-coding-agent": "^18.14.2",
     "@oh-my-pi/pi-utils": "^18.14.2",
     "@types/discord-rpc": "^4.0.10",

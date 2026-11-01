@@ -8,33 +8,25 @@ import { createConnection, createServer, type Server } from "node:net";
 import { homedir, release } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MODEL_ICON_RULES, PROVIDER_ICON_RULES, type IconRule } from "./model-icons.generated.ts";
 import { promisify } from "node:util";
 
 const CLIENT_ID = process.env.OMP_DISCORD_CLIENT_ID ?? "1566329796068384808";
 const LARGE_IMAGE_KEY = process.env.OMP_DISCORD_LARGE_IMAGE_KEY;
-// Values are Discord Art Asset keys: upload assets/models/<key>.png to the app under the same name.
-// Matched against the model id first (Claude via OpenRouter/Copilot still shows Claude), then the provider.
-const BRAND_ICONS: [RegExp, string][] = [
-	[/claude|anthropic/, "claude"],
-	[/gpt|^o\d|codex|openai/, "openai"],
-	[/gemini|gemma|google/, "gemini"],
-	[/deepseek/, "deepseek"],
-	[/grok|xai/, "xai"],
-	[/stral|mixtral/, "mistral"],
-	[/qwen|qwq/, "qwen"],
-	[/kimi|moonshot/, "moonshot"],
-	[/glm|zhipu|zai/, "zhipu"],
-	[/minimax/, "minimax"],
-	[/(?<!o)llama/, "meta"],
-	[/openrouter/, "openrouter"],
-	[/copilot/, "githubcopilot"],
-	[/ollama/, "ollama"],
-	[/groq/, "groq"],
-	[/cerebras/, "cerebras"],
-	[/bedrock/, "bedrock"],
-];
+// Lobe-icons rules (see scripts/sync-model-icons.ts); keys are Discord Art Assets uploaded from assets/models/.
+const compileIconRules = (rules: readonly IconRule[]) =>
+	rules.map(([keywords, key]) => [keywords.map((keyword) => new RegExp(keyword, "i")), key] as const);
+const MODEL_ICONS = compileIconRules(MODEL_ICON_RULES);
+const PROVIDER_ICONS = compileIconRules(PROVIDER_ICON_RULES);
+
+/** The logo key for a model: lobe's first model rule hit, else the provider rule (Claude via Copilot stays Claude). */
+const modelIconKey = (model: { provider: string; id: string }): string | undefined => {
+	const hit = (rules: typeof MODEL_ICONS, value: string) => rules.find(([patterns]) => patterns.some((p) => p.test(value)));
+	return (hit(MODEL_ICONS, model.id.toLowerCase()) ?? hit(PROVIDER_ICONS, model.provider.toLowerCase()))?.[1] ?? undefined;
+};
 const GLOBAL_STATE_FILE = join(homedir(), ".omp", "agent", "discord-presence-state.json");
 const RECONNECT_DELAY_MS = 15_000;
+const MODEL_POLL_MS = 3_000;
 const PRESENCE_UPDATE_DEBOUNCE_MS = 750;
 // Discord accepts at most 5 activity updates per 20 s; more are acknowledged but may never render,
 // which can leave a stale "using tool" on screen. Space updates out and always send the latest state.
@@ -290,10 +282,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const label = STATUS_LABELS[presence.status];
 		const subagents = runningSubagents ? ` · ${runningSubagents} subagent${runningSubagents === 1 ? "" : "s"}` : "";
 		const state = `${presence.detail ? `${label} · ${presence.detail}` : label}${subagents}${modelSuffix}${contextSuffix}`;
-		const id = presence.model?.id.toLowerCase() ?? "";
-		const provider = presence.model?.provider.toLowerCase() ?? "";
-		const brand =
-			BRAND_ICONS.find(([pattern]) => pattern.test(id)) ?? BRAND_ICONS.find(([pattern]) => pattern.test(provider));
+		const iconKey = presence.model && modelIconKey(presence.model);
 		const hidden = projectHidden();
 		const project = hidden ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
 		const largeImageKey = LARGE_IMAGE_KEY ?? appIconUrl;
@@ -304,8 +293,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 			startTimestamp: new Date(presence.startedAt),
 			largeImageKey,
 			largeImageText: largeImageKey ? `oh-my-pi coding agent v${VERSION}` : undefined,
-			smallImageKey: brand?.[1],
-			smallImageText: brand && modelInfo,
+			smallImageKey: iconKey,
+			smallImageText: iconKey && modelInfo,
 			// Discord never shows your own buttons to you; other people see them on your profile.
 			buttons: repoUrl && !hidden ? [{ label: "View on GitHub", url: repoUrl }] : undefined,
 			instance: false,
@@ -509,6 +498,15 @@ export default function discordPresence(pi: ExtensionAPI) {
 			schedulePresenceUpdate();
 		});
 		modes = formatModes(ctx.sessionModes?.getState()); // TUI only; mode_changed covers the rest
+		// omp emits no model/effort change event; poll the live selection so a switch shows without a prompt.
+		let lastEffort = pi.getThinkingLevel();
+		ctx.setInterval(() => {
+			const model = ctx.model;
+			const effort = pi.getThinkingLevel();
+			if (model?.provider === presence.model?.provider && model?.id === presence.model?.id && effort === lastEffort) return;
+			lastEffort = effort;
+			updatePresence({ model });
+		}, MODEL_POLL_MS);
 		repoUrl = undefined;
 		void findPublicGithubRepo(ctx.cwd).then((url) => {
 			repoUrl = url;
