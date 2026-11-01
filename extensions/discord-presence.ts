@@ -122,13 +122,17 @@ const writeGlobalState = (patch: Partial<GlobalState>): GlobalState => {
 	return next;
 };
 
-const fetchAppIconUrl = async (): Promise<string | undefined> => {
+/** Public application info (no auth): the name Discord shows as the activity title, and its icon. */
+const fetchAppInfo = async (): Promise<{ name?: string; iconUrl?: string }> => {
 	try {
 		const response = await fetch(`https://discord.com/api/v10/applications/${CLIENT_ID}/rpc`);
-		const app = (await response.json()) as { icon?: string | null };
-		return app.icon ? `https://cdn.discordapp.com/app-icons/${CLIENT_ID}/${app.icon}.png?size=512` : undefined;
+		const app = (await response.json()) as { name?: string; icon?: string | null };
+		return {
+			name: app.name,
+			iconUrl: app.icon ? `https://cdn.discordapp.com/app-icons/${CLIENT_ID}/${app.icon}.png?size=512` : undefined,
+		};
 	} catch {
-		return undefined;
+		return {};
 	}
 };
 
@@ -136,20 +140,44 @@ const execFileAsync = promisify(execFile);
 // Captures owner/repo from https, ssh and scp-style remotes; credentials before the host are never captured.
 const GITHUB_REMOTE = /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/;
 
-/** The public GitHub URL of cwd's `origin` remote, if any. */
-const findPublicGithubRepo = async (cwd: string): Promise<string | undefined> => {
+type RepoLookup = { url: string; slug: string } | { reason: string };
+
+/** The public GitHub URL of cwd's `origin` remote, or why there is no button. */
+const findPublicGithubRepo = async (cwd: string): Promise<RepoLookup> => {
+	let slug: string | undefined;
 	try {
 		const { stdout } = await execFileAsync("git", ["-C", cwd, "remote", "get-url", "origin"]);
-		const slug = GITHUB_REMOTE.exec(stdout.trim())?.[1];
-		if (!slug) return undefined;
+		slug = GITHUB_REMOTE.exec(stdout.trim())?.[1];
+	} catch {
+		return { reason: "no git origin remote" };
+	}
+	if (!slug) return { reason: "origin is not on GitHub" };
+	try {
 		// Only link public repos: a private repo's URL would leak its owner/name to everyone viewing the profile.
 		const response = await fetch(`https://api.github.com/repos/${slug}`, {
 			headers: { "User-Agent": "omp-discord-presence" },
 		});
-		return response.ok ? `https://github.com/${slug}` : undefined;
+		if (response.ok) return { url: `https://github.com/${slug}`, slug };
+		return { reason: response.status === 404 ? "repo is private or missing" : `GitHub API HTTP ${response.status}` };
 	} catch {
-		return undefined; // not a git repo, no origin, git missing, or offline
+		return { reason: "GitHub API unreachable" };
 	}
+};
+
+/** Asset keys uploaded to the Discord application; undefined when Discord can't be reached. */
+const fetchUploadedAssets = async (): Promise<Set<string> | undefined> => {
+	try {
+		const response = await fetch(`https://discord.com/api/v10/oauth2/applications/${CLIENT_ID}/assets`);
+		if (!response.ok) return undefined;
+		return new Set(((await response.json()) as { name: string }[]).map((asset) => asset.name));
+	} catch {
+		return undefined;
+	}
+};
+
+const formatDuration = (ms: number): string => {
+	const seconds = Math.round(ms / 1000); // round once so "14m 60s" can't happen
+	return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 };
 
 // WSL: Discord runs on Windows and only exposes a named pipe, so serve the Unix socket discord-rpc looks for
@@ -232,8 +260,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let rpc: DiscordRpcClient | undefined;
 	let connected = false;
 	let reconnectTimer: NodeJS.Timeout | undefined;
-	let appIconUrl: string | undefined;
-	let repoUrl: string | undefined;
+	let app: { name?: string; iconUrl?: string } = {};
+	let repo: RepoLookup = { reason: "not checked yet" };
+	let lastActivity: DiscordRPC.Presence | undefined;
+	let idleSince: number | undefined;
 	let wslBridge: Server | undefined;
 	let updateTimer: NodeJS.Timeout | undefined;
 	let lastFlushAt = 0;
@@ -285,7 +315,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const iconKey = presence.model && modelIconKey(presence.model);
 		const hidden = projectHidden();
 		const project = hidden ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
-		const largeImageKey = LARGE_IMAGE_KEY ?? appIconUrl;
+		const largeImageKey = LARGE_IMAGE_KEY ?? app.iconUrl;
 
 		return {
 			details: truncateDiscordText(`omp v${VERSION} · ${project}${modes ? ` · ${modes}` : ""}`),
@@ -296,7 +326,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			smallImageKey: iconKey,
 			smallImageText: iconKey && modelInfo,
 			// Discord never shows your own buttons to you; other people see them on your profile.
-			buttons: repoUrl && !hidden ? [{ label: "View on GitHub", url: repoUrl }] : undefined,
+			buttons: "url" in repo && !hidden ? [{ label: "View on GitHub", url: repo.url }] : undefined,
 			instance: false,
 		};
 	};
@@ -307,7 +337,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 		try {
 			lastFlushAt = Date.now();
-			await rpc.setActivity(buildActivity());
+			const activity = buildActivity();
+			await rpc.setActivity(activity);
+			lastActivity = activity;
 		} catch {
 			connected = false;
 			scheduleReconnect();
@@ -326,8 +358,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 		if (patch.status) {
 			clearTimeout(awayTimer);
 			if (patch.status === "idle") {
+				idleSince = Date.now();
 				awayTimer = setTimeout(() => updatePresence({ status: "away" }), AWAY_AFTER_MS);
 				awayTimer.unref(); // never keep omp (e.g. print mode) alive just to flip to "away"
+			} else if (patch.status !== "away") {
+				idleSince = undefined;
 			}
 		}
 		schedulePresenceUpdate();
@@ -420,6 +455,52 @@ export default function discordPresence(pi: ExtensionAPI) {
 		});
 	};
 
+	/** Multi-line report for `/discord-presence status`: what Discord receives and why parts may be missing. */
+	const describeStatus = async (ctx: ExtensionContext): Promise<string> => {
+		const transport = !IS_WSL
+			? "direct IPC"
+			: wslBridge
+				? "WSL bridge started by this session"
+				: "WSL, shared socket from another omp session or a relay";
+		if (!app.name) app = await fetchAppInfo(); // the startup fetch may have failed (offline, rate limit)
+		const activity = lastActivity ?? buildActivity();
+		const iconKey = activity.smallImageKey;
+		const uploaded = iconKey ? await fetchUploadedAssets() : undefined;
+		const logo = !iconKey
+			? "none (no lobe-icons rule matches this model)"
+			: `${iconKey} ${uploaded === undefined ? "(could not check Art Assets)" : uploaded.has(iconKey) ? "✓ uploaded" : "✗ not uploaded as an Art Asset"}`;
+		const hidden = projectHidden();
+		const button = hidden
+			? "none (project hidden)"
+			: "url" in repo
+				? `View on GitHub → ${repo.url}`
+				: `none (${repo.reason})`;
+		const away =
+			presence.status === "away"
+				? `away (idle ${formatDuration(Date.now() - (idleSince ?? Date.now()))})`
+				: idleSince !== undefined
+					? `idle ${formatDuration(Date.now() - idleSince)}, away in ${formatDuration(Math.max(0, idleSince + AWAY_AFTER_MS - Date.now()))}`
+					: "active";
+		const context = readContextPercent(ctx);
+		return [
+			`Discord presence: ${enabled ? "enabled" : "disabled"} · ${connected ? `connected (${transport})` : "not connected"}`,
+			`App: ${app.name ?? "?"} (${CLIENT_ID})`,
+			"",
+			lastActivity ? "Sent to Discord:" : "Would send (not connected yet):",
+			`  ${activity.details}`,
+			`  ${activity.state}`,
+			`  logo: ${logo}`,
+			`  button: ${button}`,
+			lastActivity ? `  last update ${formatDuration(Date.now() - lastFlushAt)} ago` : "",
+			"",
+			`Project: ${normalizeProjectName(cwd)} · ${hidden ? "hidden" : "visible"}`,
+			`Context: ${showContext ? "shown" : "hidden"}${context === undefined ? "" : ` (now ${context}%)`} · ${away}`,
+			`Settings: ${GLOBAL_STATE_FILE}`,
+		]
+			.filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+			.join("\n");
+	};
+
 	pi.registerCommand("discord-presence", {
 		description: `toggle Discord Rich Presence for all omp sessions, or hide/show this project's name. ${USAGE}`,
 		handler: async (args, ctx) => {
@@ -463,12 +544,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 					await applyGlobalState(writeGlobalState({ showContext: arg === "on" }));
 					ctx.ui.notify(`context usage ${arg === "on" ? "shown" : "hidden"} on discord.`, "info");
 					return;
-				case "status":
-					ctx.ui.notify(
-						`discord presence: ${enabled ? "enabled globally" : "disabled globally"}, ${connected ? "connected" : "not connected"}, project ${projectHidden() ? "hidden" : "visible"}, context ${showContext ? `shown (${readContextPercent(ctx) ?? "?"}%)` : "hidden"}`,
-						connected ? "info" : "warning",
-					);
+				case "status": {
+					const report = await describeStatus(ctx);
+					ctx.ui.notify(report, connected ? "info" : "warning");
 					return;
+				}
 				default:
 					ctx.ui.notify(USAGE, "warning");
 			}
@@ -493,8 +573,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 			startedAt: Date.now(),
 		});
 		// Discord hides the small (brand) image without a large one; default to the app's own icon.
-		if (!LARGE_IMAGE_KEY && !appIconUrl) void fetchAppIconUrl().then((url) => {
-			appIconUrl = url;
+		if (!app.name) void fetchAppInfo().then((info) => {
+			app = info;
 			schedulePresenceUpdate();
 		});
 		modes = formatModes(ctx.sessionModes?.getState()); // TUI only; mode_changed covers the rest
@@ -507,10 +587,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 			lastEffort = effort;
 			updatePresence({ model });
 		}, MODEL_POLL_MS);
-		repoUrl = undefined;
-		void findPublicGithubRepo(ctx.cwd).then((url) => {
-			repoUrl = url;
-			if (url) schedulePresenceUpdate();
+		repo = { reason: "checking GitHub" };
+		void findPublicGithubRepo(ctx.cwd).then((lookup) => {
+			repo = lookup;
+			if ("url" in lookup) schedulePresenceUpdate();
 		});
 		if (enabled) void connect();
 	});

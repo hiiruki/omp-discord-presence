@@ -192,6 +192,30 @@ Inside omp:
 /discord-presence context on|off   # show context-window usage (off by default)
 ```
 
+`status` shows exactly what Discord receives, and why parts may be missing:
+
+```text
+Discord presence: enabled · connected (WSL bridge started by this session)
+App: OH MY PI (1566329796068384808)
+
+Sent to Discord:
+  omp v18.15.0 · omp-discord-presence
+  idle · anthropic/claude-opus-5-5 · effort: high
+  logo: claude ✓ uploaded
+  button: View on GitHub → https://github.com/hiiruki/omp-discord-presence
+  last update 9s ago
+
+Project: omp-discord-presence · visible
+Context: hidden (now 2%) · idle 10s, away in 14m 50s
+Settings: /home/me/.omp/agent/discord-presence-state.json
+```
+
+- **Connection:** direct IPC, the WSL bridge, or a socket another omp session or relay already serves.
+- **Logo:** checked against the application's public Art Asset list. `✗ not uploaded` means the key is missing in the Developer Portal.
+- **Button:** the GitHub URL, or why there is none (project hidden, no git origin, not on GitHub, private repo, GitHub API unreachable).
+- **Away timer:** how long the session has been idle and when it turns `away`.
+- **Private data:** goal objectives, plan paths, retry errors and the hidden-project list are never shown.
+
 `hide` replaces the project name with `private project` on Discord. It applies to the current directory and everything below it, so a session started in a subdirectory of a hidden project stays hidden. `show` removes every hidden entry that covers the current directory.
 
 The on/off state, the hidden project list and the context setting are global across omp projects and sessions, and changes apply live to every running session. They are stored at:
@@ -212,7 +236,7 @@ The on/off state, the hidden project list and the context setting are global acr
 
 - **`/discord-presence status` says "not connected":** check that the Discord desktop app is running and that activity sharing is on. The plugin retries every 15 seconds.
 - **Status stays "not connected" right after restarting omp many times in a row:** Discord briefly stops answering when clients reconnect rapidly. Wait a minute.
-- **Logo badge is blank:** that brand's Art Asset is missing from the Discord application (see below).
+- **Logo badge is blank:** run `/discord-presence status`. `logo: … ✗ not uploaded` means that Art Asset is missing from the Discord application (see below). `logo: none` means no lobe-icons rule matches the model.
 
 ## Discord application (maintainer setup)
 
