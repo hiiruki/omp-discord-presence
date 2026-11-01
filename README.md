@@ -21,6 +21,14 @@ Context-window usage can be shown at the end of the status (`… · effort: high
 
 While subagents (task tool, eval agents) are working, the status shows how many are running, e.g. `using tool · wait · 2 subagents · …`. Nested subagents are included. The count drops as each one finishes.
 
+When omp is blocked on you, the status says so instead of `thinking`:
+
+- `waiting for approval · bash`: a tool call needs your approval. This only happens when `tools.approvalMode` prompts, e.g. `always-ask` or `write`. The approval reason is not shown, because it can quote the command.
+- `waiting for your answer`: the `ask` tool is open.
+- `waiting for plan review`: the plan-mode review is open.
+
+Waiting never turns into `away`.
+
 ### GitHub button
 
 When the project is a git repository whose `origin` remote points to a **public** GitHub repo, the status gets a **View on GitHub** button linking to it.
@@ -91,6 +99,7 @@ flowchart TD
         E1["session_start"]
         E2["agent_start / agent_end"]
         E3["tool_execution_start / end"]
+        E8["tool_approval / plan_review<br/>requested / resolved"]
         E6["auto_compaction / auto_retry<br/>start / end"]
         E7["mode_changed<br/>(plan / goal / loop / vibe)"]
         E4["/discord-presence command"]
@@ -111,7 +120,7 @@ flowchart TD
         G["public GitHub URL<br/>(git origin + GitHub API)"]
     end
 
-    E1 & E2 & E3 & E6 & E7 --> P
+    E1 & E2 & E3 & E6 & E7 & E8 --> P
     E4 -- "on / off / hide / show" --> S
     S -- "file watcher<br/>(all sessions)" --> P
     P --> T --> B
@@ -159,6 +168,11 @@ stateDiagram-v2
     retrying --> working: auto_retry_end
     idle --> away: no prompt for the away time<br/>(15 min by default)
     away --> working: agent_start
+    tool --> waiting: approval requested,<br/>or the ask tool runs
+    waiting --> tool: approval resolved
+    waiting --> working: ask answered
+    working --> waiting: plan review opened
+    waiting --> idle: plan review closed
     idle --> compacting: auto_compaction_start
     working --> compacting: auto_compaction_start
     tool --> compacting: auto_compaction_start
@@ -174,6 +188,7 @@ stateDiagram-v2
 | `away` | away (idle for the away time, 15 minutes by default) |
 | `working` | thinking |
 | `tool` | using tool · `<tool name>` |
+| `waiting` | waiting for approval · `<tool>` / your answer / plan review |
 | `compacting` | compacting context |
 | `retrying` | retrying · attempt `<n>/<max>` |
 

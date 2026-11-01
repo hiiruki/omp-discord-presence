@@ -34,7 +34,7 @@ const MIN_PRESENCE_UPDATE_INTERVAL_MS = 4_000;
 const DISCORD_TEXT_LIMIT = 128;
 const PRIVATE_PROJECT_LABEL = "private project";
 
-type PresenceStatus = "idle" | "away" | "working" | "tool" | "compacting" | "retrying" | "offline";
+type PresenceStatus = "idle" | "away" | "working" | "tool" | "waiting" | "compacting" | "retrying" | "offline";
 
 const STATUS_LABELS: Record<PresenceStatus, string> = {
 	idle: "idle",
@@ -43,6 +43,7 @@ const STATUS_LABELS: Record<PresenceStatus, string> = {
 	compacting: "compacting context",
 	retrying: "retrying",
 	away: "away",
+	waiting: "waiting for",
 	offline: "starting",
 };
 
@@ -285,6 +286,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let lastFlushAt = 0;
 	let awayTimer: NodeJS.Timeout | undefined;
 	const runningTools = new Map<string, string>(); // toolCallId -> toolName
+	const pendingApprovals = new Map<string, string>(); // toolCallId -> toolName awaiting the user's approval
+	let planReviewOpen = false;
 	let agentRunning = false;
 	let modes = ""; // formatted active omp modes, see formatModes
 	let stateWatcher: FSWatcher | undefined;
@@ -328,7 +331,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const contextSuffix = showContext && presence.contextPercent !== undefined ? ` · context ${presence.contextPercent}%` : "";
 		const label = STATUS_LABELS[presence.status];
 		const subagents = runningSubagents ? ` · ${runningSubagents} subagent${runningSubagents === 1 ? "" : "s"}` : "";
-		const state = `${presence.detail ? `${label} · ${presence.detail}` : label}${subagents}${modelSuffix}${contextSuffix}`;
+		// "waiting for approval · bash" reads as one phrase; other details are separate segments.
+		const head = presence.detail ? `${label}${presence.status === "waiting" ? " " : " · "}${presence.detail}` : label;
+		const state = `${head}${subagents}${modelSuffix}${contextSuffix}`;
 		const iconKey = presence.model && modelIconKey(presence.model);
 		const hidden = projectHidden();
 		const project = hidden ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
@@ -681,9 +686,15 @@ export default function discordPresence(pi: ExtensionAPI) {
 		if (enabled) void connect();
 	});
 
-	// What the status returns to once a tool, compaction or retry finishes.
+	// The status everything returns to: waiting on the user beats a running tool, which beats thinking/idle.
 	const currentActivity = (): Pick<PresenceState, "status" | "detail"> => {
-		const tool = [...runningTools.values()].at(-1);
+		const approval = [...pendingApprovals.values()].at(-1);
+		if (approval) return { status: "waiting", detail: `approval · ${approval}` };
+		const tools = [...runningTools.values()];
+		// The ask tool blocks on the user's answer rather than doing work.
+		if (tools.includes("ask")) return { status: "waiting", detail: "your answer" };
+		if (planReviewOpen) return { status: "waiting", detail: "plan review" };
+		const tool = tools.at(-1);
 		if (tool) return { status: "tool", detail: tool };
 		return { status: agentRunning ? "working" : "idle", detail: undefined };
 	};
@@ -691,10 +702,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 	pi.on("agent_start", async (_event, ctx) => {
 		if (isSubagent) return setSubagentRunning(true);
 		runningTools.clear();
+		pendingApprovals.clear();
 		agentRunning = true;
 		updatePresence({
-			status: "working",
-			detail: undefined,
+			...currentActivity(),
 			model: ctx.model,
 			startedAt: Date.now(),
 		});
@@ -703,11 +714,33 @@ export default function discordPresence(pi: ExtensionAPI) {
 	// Tools can run in parallel: stay on "using tool" until the last one finishes.
 	pi.on("tool_execution_start", async (event) => {
 		runningTools.set(event.toolCallId, event.toolName);
-		updatePresence({ status: "tool", detail: event.toolName });
+		updatePresence(currentActivity());
 	});
 
 	pi.on("tool_execution_end", async (event) => {
 		runningTools.delete(event.toolCallId);
+		pendingApprovals.delete(event.toolCallId);
+		updatePresence(currentActivity());
+	});
+
+	// Fired only when omp's approval mode prompts for a tool call; the reason is not shown (it can quote the command).
+	pi.on("tool_approval_requested", async (event) => {
+		pendingApprovals.set(event.toolCallId, event.toolName);
+		updatePresence(currentActivity());
+	});
+
+	pi.on("tool_approval_resolved", async (event) => {
+		pendingApprovals.delete(event.toolCallId);
+		updatePresence(currentActivity());
+	});
+
+	pi.on("plan_review_requested", async () => {
+		planReviewOpen = true;
+		updatePresence(currentActivity());
+	});
+
+	pi.on("plan_review_resolved", async () => {
+		planReviewOpen = false;
 		updatePresence(currentActivity());
 	});
 
@@ -736,12 +769,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 	pi.on("agent_end", async (_event, ctx) => {
 		if (isSubagent) return setSubagentRunning(false);
 		runningTools.clear();
+		pendingApprovals.clear();
 		agentRunning = false;
-		updatePresence({
-			status: "idle",
-			detail: undefined,
-			contextPercent: readContextPercent(ctx),
-		});
+		// A plan review opened at the end of a planning turn keeps the status on "waiting".
+		updatePresence({ ...currentActivity(), contextPercent: readContextPercent(ctx) });
 	});
 
 	pi.on("mode_changed", async (event) => {
