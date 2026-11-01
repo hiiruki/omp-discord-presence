@@ -1,8 +1,11 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import DiscordRPC from "discord-rpc";
-import { mkdirSync, readFileSync, renameSync, watch, writeFileSync, type FSWatcher } from "node:fs";
-import { homedir } from "node:os";
+import { spawn } from "node:child_process";
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { createConnection, createServer, type Server } from "node:net";
+import { homedir, release } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const CLIENT_ID = process.env.OMP_DISCORD_CLIENT_ID ?? "1566329796068384808";
 const LARGE_IMAGE_KEY = process.env.OMP_DISCORD_LARGE_IMAGE_KEY;
@@ -101,6 +104,58 @@ const fetchAppIconUrl = async (): Promise<string | undefined> => {
 	}
 };
 
+// WSL: Discord runs on Windows and only exposes a named pipe, so serve the Unix socket discord-rpc looks for
+// and relay each connection through the bundled npiperelay.exe. Path logic mirrors discord-rpc's ipc transport.
+const IS_WSL = process.platform === "linux" && (!!process.env.WSL_DISTRO_NAME || /microsoft/i.test(release()));
+const { XDG_RUNTIME_DIR, TMPDIR, TMP, TEMP } = process.env;
+const IPC_SOCKET_PATH = join(XDG_RUNTIME_DIR || TMPDIR || TMP || TEMP || "/tmp", "discord-ipc-0");
+const NPIPERELAY_PATH = fileURLToPath(new URL("../bin/npiperelay.exe", import.meta.url));
+// shortcut: only Discord's first pipe (stable client); add -1..-9 fallbacks if PTB/Canary users need it.
+const WINDOWS_DISCORD_PIPE = "//./pipe/discord-ipc-0";
+
+const canConnect = (path: string): Promise<boolean> => {
+	const { promise, resolve } = Promise.withResolvers<boolean>();
+	const probe = createConnection(path);
+	probe.once("connect", () => {
+		probe.destroy();
+		resolve(true);
+	});
+	probe.once("error", () => resolve(false));
+	return promise;
+};
+
+/** Starts the WSL relay unless something (native Discord, a user's socat relay, another session) already serves the socket. */
+const startWslBridge = async (): Promise<Server | undefined> => {
+	if (!IS_WSL || (await canConnect(IPC_SOCKET_PATH))) return undefined;
+
+	rmSync(IPC_SOCKET_PATH, { force: true }); // stale socket left by a crashed session
+	try {
+		chmodSync(NPIPERELAY_PATH, 0o755); // package managers may drop the exec bit; WSL interop needs it
+	} catch {
+		// Missing binary surfaces as a spawn error below.
+	}
+
+	const server = createServer((socket) => {
+		// -ei: exit when omp's end closes (even if omp crashed), so Discord drops the activity instead of keeping a stale one.
+		const relay = spawn(NPIPERELAY_PATH, ["-ep", "-ei", "-s", WINDOWS_DISCORD_PIPE], { stdio: ["pipe", "pipe", "ignore"] });
+		// Every stream gets an error handler: an unhandled 'error' event would crash the whole omp session.
+		relay.on("error", () => socket.destroy());
+		relay.on("exit", () => socket.destroy());
+		relay.stdin.on("error", () => socket.destroy());
+		socket.on("error", () => relay.kill());
+		socket.on("close", () => relay.kill());
+		socket.pipe(relay.stdin);
+		relay.stdout.pipe(socket);
+	});
+	server.unref();
+
+	const { promise, resolve } = Promise.withResolvers<Server | undefined>();
+	server.once("listening", () => resolve(server));
+	server.once("error", () => resolve(undefined)); // e.g. another session won the race; its socket works too
+	server.listen(IPC_SOCKET_PATH);
+	return promise;
+};
+
 const USAGE = "usage: /discord-presence [on|off|status|refresh|hide|show]";
 
 export default function discordPresence(pi: ExtensionAPI) {
@@ -108,6 +163,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let connected = false;
 	let reconnectTimer: NodeJS.Timeout | undefined;
 	let appIconUrl: string | undefined;
+	let wslBridge: Server | undefined;
 	let updateTimer: NodeJS.Timeout | undefined;
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
@@ -191,6 +247,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 		if (shuttingDown || connected || !enabled) return;
 
 		try {
+			// Re-checked on every attempt: if the session that owned the bridge exits, this one takes over.
+			wslBridge ??= await startWslBridge();
 			rpc = new DiscordRPC.Client({ transport: "ipc" }) as DiscordRpcClient;
 			rpc.on("ready", () => {
 				connected = true;
@@ -208,6 +266,12 @@ export default function discordPresence(pi: ExtensionAPI) {
 			await rpc.login({ clientId: CLIENT_ID });
 		} catch {
 			connected = false;
+			// A timed-out login leaves its socket (and on WSL a relay process) open; close it before retrying.
+			try {
+				rpc?.destroy?.();
+			} catch {
+				// Ignore cleanup errors.
+			}
 			rpc = undefined;
 			scheduleReconnect();
 		}
@@ -371,5 +435,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 		stateWatcher?.close();
 		stateWatcher = undefined;
 		await clearDiscordPresence();
+		if (wslBridge) {
+			wslBridge.close();
+			rmSync(IPC_SOCKET_PATH, { force: true });
+			wslBridge = undefined;
+		}
 	});
 }

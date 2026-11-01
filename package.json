@@ -12,6 +12,11 @@
     "rich-presence"
   ],
   "license": "MIT",
+  "files": [
+    "extensions",
+    "bin",
+    "assets"
+  ],
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "lint": "oxlint extensions"
@@ -29,6 +34,11 @@
   },
   "peerDependencies": {
     "@oh-my-pi/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@oh-my-pi/pi-coding-agent": {
+      "optional": true
+    }
   },
   "omp": {
     "extensions": [
