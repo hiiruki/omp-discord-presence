@@ -1,16 +1,16 @@
 #!/usr/bin/env bun
 /**
- * Regenerates the model logos from lobe-icons (https://github.com/lobehub/lobe-icons) for every model in
- * omp's bundled catalog:
+ * Regenerates the model logos from lobe-icons (https://github.com/lobehub/lobe-icons):
  *
+ * - assets/models/<key>.png: every icon lobe's model/provider rules can select (upload these as Discord Art Assets)
  * - extensions/model-icons.generated.ts: lobe's model/provider keyword rules, in lobe's order
- * - assets/models/<key>.png: one logo per icon an omp model resolves to (upload these as Discord Art Assets)
+ * - README.md: the supported-logo tables between the model-icons markers, with omp catalog coverage
  *
  * Run after bumping LOBE_ICONS_VERSION / STATIC_PNG_VERSION or updating @oh-my-pi/pi-catalog:
- *   bun scripts/sync-model-icons.ts
+ *   pnpm sync-icons
  */
 import { getBundledModels, getBundledProviders } from "@oh-my-pi/pi-catalog";
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +19,9 @@ const STATIC_PNG_VERSION = "2.5.0";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ASSETS_DIR = join(ROOT, "assets/models");
 const GENERATED_FILE = join(ROOT, "extensions/model-icons.generated.ts");
+const README_FILE = join(ROOT, "README.md");
+const README_START = "<!-- model-icons:start -->";
+const README_END = "<!-- model-icons:end -->";
 // Discord allows 300 Art Assets per application.
 const MAX_ASSETS = 300;
 
@@ -55,19 +58,10 @@ const base = `https://cdn.jsdelivr.net/npm/@lobehub/icons@${LOBE_ICONS_VERSION}/
 const modelRules = parseLobeMappings(await fetchText(`${base}/modelConfig.mjs`), "modelMappings");
 const providerRules = parseLobeMappings(await fetchText(`${base}/providerConfig.mjs`), "providerMappings");
 
-// Every icon an omp model resolves to: by model id first, then by provider id (as the extension does).
-const used = new Set<string>();
-const unmatched: string[] = [];
-let modelCount = 0;
-for (const provider of getBundledProviders()) {
-	for (const model of getBundledModels(provider)) {
-		modelCount++;
-		const rule = match(modelRules, model.id) ?? match(providerRules, provider);
-		if (rule) used.add(rule.icon);
-		else unmatched.push(`${provider}/${model.id}`);
-	}
-}
-if (used.size > MAX_ASSETS) throw new Error(`${used.size} icons exceed Discord's ${MAX_ASSETS} Art Assets`);
+// Ship every icon a rule can select, not only those today's catalog hits: custom/gateway models and future omp
+// models may match any rule. Lobe's other icons (apps, tools) are never selected, so they are left out.
+const ruleIcons = [...new Set([...modelRules, ...providerRules].map((rule) => rule.icon))].sort();
+if (ruleIcons.length > MAX_ASSETS) throw new Error(`${ruleIcons.length} icons exceed Discord's ${MAX_ASSETS} Art Assets`);
 
 // Prefer the colored variant; fall back to the mono icon drawn for dark backgrounds.
 const listing = (await (
@@ -78,7 +72,7 @@ const darkPngs = new Set(listing.files.map((file) => file.name).filter((name) =>
 rmSync(ASSETS_DIR, { recursive: true, force: true });
 mkdirSync(ASSETS_DIR, { recursive: true });
 const shipped = new Map<string, string>(); // lobe icon dir -> Discord asset key
-for (const icon of [...used].sort()) {
+for (const icon of ruleIcons) {
 	const key = icon.toLowerCase();
 	const file = [`/dark/${key}-color.png`, `/dark/${key}.png`].find((name) => darkPngs.has(name));
 	if (!file) {
@@ -91,7 +85,7 @@ for (const icon of [...used].sort()) {
 	shipped.set(icon, key);
 }
 
-// Rules keep lobe's order so precedence matches; an icon without a shipped asset maps to null (no badge, never a wrong one).
+// Rules keep lobe's order so precedence matches; an icon without a PNG maps to null (no badge, never a wrong one).
 const toEntry = (rule: Rule) => `\t[${JSON.stringify(rule.keywords)}, ${JSON.stringify(shipped.get(rule.icon) ?? null)}],`;
 writeFileSync(
 	GENERATED_FILE,
@@ -112,8 +106,57 @@ ${providerRules.map(toEntry).join("\n")}
 `,
 );
 
-console.log(`${modelCount} omp models -> ${used.size} icons, ${shipped.size} shipped as assets/models/*.png`);
-console.log(`${unmatched.length} models without a logo, e.g. ${unmatched.slice(0, 8).join(", ")}`);
+// How many models in omp's bundled catalog each icon covers, resolved like the extension: model id, then provider.
+const catalogCount = new Map<string, number>();
+let modelCount = 0;
+let unmatched = 0;
+for (const provider of getBundledProviders()) {
+	for (const model of getBundledModels(provider)) {
+		modelCount++;
+		const rule = match(modelRules, model.id) ?? match(providerRules, provider);
+		if (rule) catalogCount.set(rule.icon, (catalogCount.get(rule.icon) ?? 0) + 1);
+		else unmatched++;
+	}
+}
+
+// README tables: one row per icon, keywords merged across its rules in lobe's order.
+const keywordsByIcon = (rules: Rule[]) => {
+	const byIcon = new Map<string, string[]>();
+	for (const rule of rules) byIcon.set(rule.icon, [...(byIcon.get(rule.icon) ?? []), ...rule.keywords]);
+	return byIcon;
+};
+const cell = (keywords: string[]) => keywords.map((keyword) => `\`${keyword.replaceAll("|", "\\|")}\``).join(", ");
+const logo = (icon: string) => {
+	const key = shipped.get(icon);
+	return key ? `<img src="assets/models/${key}.png" width="20" height="20" alt="">` : "";
+};
+const table = (rules: Rule[], header: string) => {
+	const rows = [...keywordsByIcon(rules)].map(
+		([icon, keywords]) =>
+			`| ${logo(icon)} | \`${shipped.get(icon) ?? "-"}\` | ${cell(keywords)} | ${catalogCount.get(icon) ?? 0} |`,
+	);
+	return [`| Logo | Key | ${header} | omp catalog models |`, "| --- | --- | --- | --- |", ...rows].join("\n");
+};
+const readme = readFileSync(README_FILE, "utf8");
+const start = readme.indexOf(README_START);
+const end = readme.indexOf(README_END);
+if (start === -1 || end === -1) throw new Error(`README.md is missing the ${README_START} / ${README_END} markers`);
+const section = `${README_START}
+<!-- Generated by scripts/sync-model-icons.ts; run \`pnpm sync-icons\` instead of editing. -->
+
+${shipped.size} logos from \`@lobehub/icons@${LOBE_ICONS_VERSION}\`. They cover ${modelCount - unmatched} of the ${modelCount} models in omp's bundled catalog.
+
+**Matched against the model id** (first matching rule in lobe's order wins; keywords are case-insensitive regexes):
+
+${table(modelRules, "Model id contains")}
+
+**Fallback matched against the provider id** (only when no model rule matches):
+
+${table(providerRules, "Provider id contains")}
+`;
+writeFileSync(README_FILE, readme.slice(0, start) + section + readme.slice(end));
+
+console.log(`${shipped.size} logos in assets/models/; omp catalog: ${modelCount - unmatched}/${modelCount} models covered`);
 
 // What to change in the Developer Portal: Discord lists an application's Art Assets publicly.
 const clientId = process.env.OMP_DISCORD_CLIENT_ID ?? "1566329796068384808";
