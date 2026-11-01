@@ -17,6 +17,8 @@ Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mo
 
 After 15 minutes without a prompt, `idle` turns into `away`. The next prompt switches it back to `thinking`.
 
+Context-window usage can be shown at the end of the status (`… · effort: high · context 42%`). It is **off by default**. Turn it on with `/discord-presence context on`. The value updates after every turn.
+
 ### GitHub button
 
 When the project is a git repository whose `origin` remote points to a **public** GitHub repo, the status gets a **View on GitHub** button linking to it.
@@ -185,11 +187,12 @@ Inside omp:
 /discord-presence refresh
 /discord-presence hide     # hide this project's name (alias: private)
 /discord-presence show     # show this project's name again (alias: public)
+/discord-presence context on|off   # show context-window usage (off by default)
 ```
 
 `hide` replaces the project name with `private project` on Discord. It applies to the current directory and everything below it, so a session started in a subdirectory of a hidden project stays hidden. `show` removes every hidden entry that covers the current directory.
 
-The on/off state and the hidden project list are global across omp projects and sessions, and changes apply live to every running session. They are stored at:
+The on/off state, the hidden project list and the context setting are global across omp projects and sessions, and changes apply live to every running session. They are stored at:
 
 ```text
 ~/.omp/agent/discord-presence-state.json
@@ -198,7 +201,8 @@ The on/off state and the hidden project list are global across omp projects and 
 ```json
 {
   "enabled": true,
-  "hiddenProjects": ["/home/me/work/secret-client"]
+  "hiddenProjects": ["/home/me/work/secret-client"],
+  "showContext": false
 }
 ```
 

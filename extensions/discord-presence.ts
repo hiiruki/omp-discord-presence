@@ -1,4 +1,4 @@
-import type { ExtensionAPI, SessionModeState } from "@oh-my-pi/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, SessionModeState } from "@oh-my-pi/pi-coding-agent";
 import DiscordRPC from "discord-rpc";
 // Resolved by omp's loader to the running host, so this is the installed omp version, not a bundled copy.
 import { VERSION } from "@oh-my-pi/pi-utils";
@@ -61,6 +61,8 @@ type PresenceState = {
 	/** Shown after the status label: the tool name, or the retry attempt. */
 	detail?: string;
 	model?: { provider: string; id: string };
+	/** Context-window usage in whole percent; only shown when showContext is on. */
+	contextPercent?: number;
 	startedAt: number;
 };
 
@@ -68,6 +70,8 @@ type GlobalState = {
 	enabled: boolean;
 	/** Absolute project paths whose name is never sent to Discord (subdirectories included). */
 	hiddenProjects: string[];
+	/** Opt-in: append context-window usage to the status. */
+	showContext: boolean;
 };
 
 type DiscordRpcClient = DiscordRPC.Client & {
@@ -90,15 +94,20 @@ const isProjectHidden = (cwd: string, hiddenProjects: string[]): boolean =>
 
 const readGlobalState = (): GlobalState => {
 	try {
-		const parsed = JSON.parse(readFileSync(GLOBAL_STATE_FILE, "utf8")) as { enabled?: unknown; hiddenProjects?: unknown };
+		const parsed = JSON.parse(readFileSync(GLOBAL_STATE_FILE, "utf8")) as {
+			enabled?: unknown;
+			hiddenProjects?: unknown;
+			showContext?: unknown;
+		};
 		return {
 			enabled: parsed.enabled !== false,
 			hiddenProjects: Array.isArray(parsed.hiddenProjects)
 				? parsed.hiddenProjects.filter((project): project is string => typeof project === "string")
 				: [],
+			showContext: parsed.showContext === true,
 		};
 	} catch {
-		return { enabled: true, hiddenProjects: [] };
+		return { enabled: true, hiddenProjects: [], showContext: false };
 	}
 };
 
@@ -203,7 +212,12 @@ const startWslBridge = async (): Promise<Server | undefined> => {
 	return promise;
 };
 
-const USAGE = "usage: /discord-presence [on|off|status|refresh|hide|show]";
+const USAGE = "usage: /discord-presence [on|off|status|refresh|hide|show|context on|context off]";
+
+const readContextPercent = (ctx: ExtensionContext): number | undefined => {
+	const percent = ctx.getContextUsage()?.percent;
+	return percent !== undefined && Number.isFinite(percent) ? Math.round(percent) : undefined;
+};
 
 export default function discordPresence(pi: ExtensionAPI) {
 	let rpc: DiscordRpcClient | undefined;
@@ -220,7 +234,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let modes = ""; // formatted active omp modes, see formatModes
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
-	let { enabled, hiddenProjects } = readGlobalState();
+	let { enabled, hiddenProjects, showContext } = readGlobalState();
 	let cwd = process.cwd();
 
 	let presence: PresenceState = {
@@ -255,8 +269,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const effort = pi.getThinkingLevel();
 		const modelInfo = model && (effort && effort !== "inherit" ? `${model} · effort: ${effort}` : model);
 		const modelSuffix = modelInfo ? ` · ${modelInfo}` : "";
+		const contextSuffix = showContext && presence.contextPercent !== undefined ? ` · context ${presence.contextPercent}%` : "";
 		const label = STATUS_LABELS[presence.status];
-		const state = presence.detail ? `${label} · ${presence.detail}${modelSuffix}` : `${label}${modelSuffix}`;
+		const state = `${presence.detail ? `${label} · ${presence.detail}` : label}${modelSuffix}${contextSuffix}`;
 		const id = presence.model?.id.toLowerCase() ?? "";
 		const provider = presence.model?.provider.toLowerCase() ?? "";
 		const brand =
@@ -368,7 +383,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 	const applyGlobalState = async (next: GlobalState) => {
 		const wasHidden = projectHidden();
 		hiddenProjects = next.hiddenProjects;
-		if (projectHidden() !== wasHidden) await flushPresence();
+		const contextChanged = showContext !== next.showContext;
+		showContext = next.showContext;
+		if (projectHidden() !== wasHidden || contextChanged) await flushPresence();
 
 		if (enabled === next.enabled) return;
 		enabled = next.enabled;
@@ -402,7 +419,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 			cwd = ctx.cwd;
 			const current = readGlobalState();
 			await applyGlobalState(current);
-			const action = args.trim().toLowerCase() || (enabled ? "off" : "on");
+			const [verb = "", arg] = args.trim().toLowerCase().split(/\s+/);
+			const action = verb || (enabled ? "off" : "on");
 
 			switch (action) {
 				case "off":
@@ -430,9 +448,17 @@ export default function discordPresence(pi: ExtensionAPI) {
 					await flushPresence();
 					ctx.ui.notify("discord rich presence refreshed.", "info");
 					return;
+				case "context":
+					if (arg !== "on" && arg !== "off") {
+						ctx.ui.notify("usage: /discord-presence context on|off", "warning");
+						return;
+					}
+					await applyGlobalState(writeGlobalState({ showContext: arg === "on" }));
+					ctx.ui.notify(`context usage ${arg === "on" ? "shown" : "hidden"} on discord.`, "info");
+					return;
 				case "status":
 					ctx.ui.notify(
-						`discord presence: ${enabled ? "enabled globally" : "disabled globally"}, ${connected ? "connected" : "not connected"}, project ${projectHidden() ? "hidden" : "visible"}`,
+						`discord presence: ${enabled ? "enabled globally" : "disabled globally"}, ${connected ? "connected" : "not connected"}, project ${projectHidden() ? "hidden" : "visible"}, context ${showContext ? `shown (${readContextPercent(ctx) ?? "?"}%)` : "hidden"}`,
 						connected ? "info" : "warning",
 					);
 					return;
@@ -448,10 +474,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 		shuttingDown = false;
 		cwd = ctx.cwd;
 		watchGlobalState();
-		({ enabled, hiddenProjects } = readGlobalState());
+		({ enabled, hiddenProjects, showContext } = readGlobalState());
 		updatePresence({
 			status: "idle",
 			model: ctx.model,
+			contextPercent: readContextPercent(ctx),
 			startedAt: Date.now(),
 		});
 		// Discord hides the small (brand) image without a large one; default to the app's own icon.
@@ -501,8 +528,13 @@ export default function discordPresence(pi: ExtensionAPI) {
 		updatePresence({ status: "compacting", detail: undefined });
 	});
 
-	pi.on("auto_compaction_end", async () => {
-		updatePresence(currentActivity());
+	pi.on("auto_compaction_end", async (_event, ctx) => {
+		updatePresence({ ...currentActivity(), contextPercent: readContextPercent(ctx) });
+	});
+
+	// Context grows every turn; no status change, so the away clock is untouched.
+	pi.on("turn_end", async (_event, ctx) => {
+		updatePresence({ contextPercent: readContextPercent(ctx) });
 	});
 
 	// The error message is not shown: it can contain request details.
@@ -514,12 +546,13 @@ export default function discordPresence(pi: ExtensionAPI) {
 		updatePresence(currentActivity());
 	});
 
-	pi.on("agent_end", async () => {
+	pi.on("agent_end", async (_event, ctx) => {
 		runningTools.clear();
 		agentRunning = false;
 		updatePresence({
 			status: "idle",
 			detail: undefined,
+			contextPercent: readContextPercent(ctx),
 		});
 	});
 
