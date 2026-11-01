@@ -15,6 +15,9 @@ importers:
       '@oh-my-pi/pi-coding-agent':
         specifier: ^18.14.2
         version: 18.14.2(@types/node@24.12.3)
+      '@oh-my-pi/pi-utils':
+        specifier: ^18.14.2
+        version: 18.14.2
       '@types/discord-rpc':
         specifier: ^4.0.10
         version: 4.0.10

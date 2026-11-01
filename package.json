@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@oh-my-pi/pi-coding-agent": "^18.14.2",
+    "@oh-my-pi/pi-utils": "^18.14.2",
     "@types/discord-rpc": "^4.0.10",
     "@types/node": "^24.0.0",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
@@ -33,10 +34,14 @@
     "typescript": "^5.9.0"
   },
   "peerDependencies": {
-    "@oh-my-pi/pi-coding-agent": "*"
+    "@oh-my-pi/pi-coding-agent": "*",
+    "@oh-my-pi/pi-utils": "*"
   },
   "peerDependenciesMeta": {
     "@oh-my-pi/pi-coding-agent": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-utils": {
       "optional": true
     }
   },

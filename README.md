@@ -2,11 +2,11 @@
 
 Discord Rich Presence extension for omp (oh-my-pi) coding agent.
 
-Discord shows the project name, the current state (idle / thinking / using tool), the active tool, and the model, with the model maker's logo as a small badge:
+Discord shows the installed omp version, the project name, the current state (idle / thinking / using tool), the active tool, and the model, with the model maker's logo as a small badge:
 
 ```text
 OH MY PI
-omp · my-project
+omp v18.15.0 · my-project
 using tool · bash · anthropic/claude-opus-4
 ```
 

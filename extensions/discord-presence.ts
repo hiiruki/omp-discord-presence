@@ -1,5 +1,7 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import DiscordRPC from "discord-rpc";
+// Resolved by omp's loader to the running host, so this is the installed omp version, not a bundled copy.
+import { VERSION } from "@oh-my-pi/pi-utils";
 import { spawn } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { createConnection, createServer, type Server } from "node:net";
@@ -210,11 +212,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const largeImageKey = LARGE_IMAGE_KEY ?? appIconUrl;
 
 		return {
-			details: truncateDiscordText(`omp · ${project}`),
+			details: truncateDiscordText(`omp v${VERSION} · ${project}`),
 			state: truncateDiscordText(state),
 			startTimestamp: new Date(presence.startedAt),
 			largeImageKey,
-			largeImageText: largeImageKey ? "oh-my-pi coding agent" : undefined,
+			largeImageText: largeImageKey ? `oh-my-pi coding agent v${VERSION}` : undefined,
 			smallImageKey: brand?.[1],
 			smallImageText: brand && model,
 			instance: false,
