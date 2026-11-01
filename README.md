@@ -15,9 +15,9 @@ Status changes reach Discord within about 4 seconds. Updates are spaced out beca
 
 Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
 
-After 15 minutes without a prompt, `idle` turns into `away`. The next prompt switches it back to `thinking`.
+After 15 minutes without a prompt (configurable in `/discord-presence settings`, or never), `idle` turns into `away`. The next prompt switches it back to `thinking`.
 
-Context-window usage can be shown at the end of the status (`… · effort: high · context 42%`). It is **off by default**. Turn it on with `/discord-presence context on`. The value updates after every turn.
+Context-window usage can be shown at the end of the status (`… · effort: high · context 42%`). It is **off by default**. Turn it on in `/discord-presence settings` or with `/discord-presence context on`. The value updates after every turn.
 
 While subagents (task tool, eval agents) are working, the status shows how many are running, e.g. `using tool · wait · 2 subagents · …`. Nested subagents are included. The count drops as each one finishes.
 
@@ -157,7 +157,7 @@ stateDiagram-v2
     tool --> idle: agent_end
     working --> retrying: auto_retry_start
     retrying --> working: auto_retry_end
-    idle --> away: 15 min without a prompt
+    idle --> away: no prompt for the away time<br/>(15 min by default)
     away --> working: agent_start
     idle --> compacting: auto_compaction_start
     working --> compacting: auto_compaction_start
@@ -171,7 +171,7 @@ stateDiagram-v2
 | --- | --- |
 | `offline` | starting |
 | `idle` | idle |
-| `away` | away (idle for 15 minutes) |
+| `away` | away (idle for the away time, 15 minutes by default) |
 | `working` | thinking |
 | `tool` | using tool · `<tool name>` |
 | `compacting` | compacting context |
@@ -182,6 +182,7 @@ stateDiagram-v2
 Inside omp:
 
 ```text
+/discord-presence settings # interactive settings menu
 /discord-presence          # toggle on/off globally
 /discord-presence status
 /discord-presence off
@@ -191,6 +192,36 @@ Inside omp:
 /discord-presence show     # show this project's name again (alias: public)
 /discord-presence context on|off   # show context-window usage (off by default)
 ```
+
+### Settings menu
+
+`/discord-presence settings` opens a menu in the omp TUI. Press Enter on a row to change it; the menu stays open, so several settings can be changed in a row. Esc or **Done** closes it.
+
+```text
+╭─ Discord presence settings ─────────────────────────╮
+│  ❯ Presence: on                                     │
+│      Show omp activity on Discord (all sessions)    │
+│    This project: visible                            │
+│    Model, effort & logo: shown                      │
+│    GitHub button: shown                             │
+│    Context usage: hidden                            │
+│    Away after: 15 min                               │
+│    Done                                             │
+╰─────────────────────────────────────────────────────╯
+```
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Presence | on | Show omp activity on Discord, for every session. |
+| This project | visible | Show the folder name, or `private project` (same as `hide` / `show`). |
+| Model, effort & logo | shown | When hidden, the model, its effort and the model logo are left out; the logo would reveal the model's maker. |
+| GitHub button | shown | The **View on GitHub** button for public repos. |
+| Context usage | hidden | Append `context N%`. |
+| Away after | 15 min | Idle time before `away`: 5, 10, 15, 30 or 60 minutes, or never. |
+
+Every change is saved globally and applied live to all running sessions. Outside the TUI (print, RPC), `settings` points to the settings file instead.
+
+### Status report
 
 `status` shows exactly what Discord receives, and why parts may be missing:
 
@@ -216,9 +247,11 @@ Settings: /home/me/.omp/agent/discord-presence-state.json
 - **Away timer:** how long the session has been idle and when it turns `away`.
 - **Private data:** goal objectives, plan paths, retry errors and the hidden-project list are never shown.
 
+### Hidden projects and storage
+
 `hide` replaces the project name with `private project` on Discord. It applies to the current directory and everything below it, so a session started in a subdirectory of a hidden project stays hidden. `show` removes every hidden entry that covers the current directory.
 
-The on/off state, the hidden project list and the context setting are global across omp projects and sessions, and changes apply live to every running session. They are stored at:
+All settings and the hidden project list are global across omp projects and sessions, and changes apply live to every running session. They are stored at:
 
 ```text
 ~/.omp/agent/discord-presence-state.json
@@ -228,7 +261,10 @@ The on/off state, the hidden project list and the context setting are global acr
 {
   "enabled": true,
   "hiddenProjects": ["/home/me/work/secret-client"],
-  "showContext": false
+  "showContext": false,
+  "showModel": true,
+  "showButton": true,
+  "awayMinutes": 15
 }
 ```
 

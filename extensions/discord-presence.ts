@@ -31,8 +31,6 @@ const PRESENCE_UPDATE_DEBOUNCE_MS = 750;
 // Discord accepts at most 5 activity updates per 20 s; more are acknowledged but may never render,
 // which can leave a stale "using tool" on screen. Space updates out and always send the latest state.
 const MIN_PRESENCE_UPDATE_INTERVAL_MS = 4_000;
-// shortcut: fixed 15 min; make it a plugin setting once settings exist.
-const AWAY_AFTER_MS = 15 * 60_000;
 const DISCORD_TEXT_LIMIT = 128;
 const PRIVATE_PROJECT_LABEL = "private project";
 
@@ -64,6 +62,21 @@ type GlobalState = {
 	hiddenProjects: string[];
 	/** Opt-in: append context-window usage to the status. */
 	showContext: boolean;
+	/** Show the model, its effort and its logo. */
+	showModel: boolean;
+	/** Show the "View on GitHub" button for public repos. */
+	showButton: boolean;
+	/** Minutes idle before the status turns "away"; 0 never. */
+	awayMinutes: number;
+};
+
+const DEFAULT_STATE: GlobalState = {
+	enabled: true,
+	hiddenProjects: [],
+	showContext: false,
+	showModel: true,
+	showButton: true,
+	awayMinutes: 15,
 };
 
 type DiscordRpcClient = DiscordRPC.Client & {
@@ -86,20 +99,23 @@ const isProjectHidden = (cwd: string, hiddenProjects: string[]): boolean =>
 
 const readGlobalState = (): GlobalState => {
 	try {
-		const parsed = JSON.parse(readFileSync(GLOBAL_STATE_FILE, "utf8")) as {
-			enabled?: unknown;
-			hiddenProjects?: unknown;
-			showContext?: unknown;
-		};
+		const parsed = JSON.parse(readFileSync(GLOBAL_STATE_FILE, "utf8")) as Partial<Record<keyof GlobalState, unknown>>;
+		const awayMinutes = parsed.awayMinutes;
 		return {
 			enabled: parsed.enabled !== false,
 			hiddenProjects: Array.isArray(parsed.hiddenProjects)
 				? parsed.hiddenProjects.filter((project): project is string => typeof project === "string")
 				: [],
 			showContext: parsed.showContext === true,
+			showModel: parsed.showModel !== false,
+			showButton: parsed.showButton !== false,
+			awayMinutes:
+				typeof awayMinutes === "number" && Number.isFinite(awayMinutes) && awayMinutes >= 0
+					? awayMinutes
+					: DEFAULT_STATE.awayMinutes,
 		};
 	} catch {
-		return { enabled: true, hiddenProjects: [], showContext: false };
+		return { ...DEFAULT_STATE };
 	}
 };
 
@@ -232,7 +248,7 @@ const startWslBridge = async (): Promise<Server | undefined> => {
 	return promise;
 };
 
-const USAGE = "usage: /discord-presence [on|off|status|refresh|hide|show|context on|context off]";
+const USAGE = "usage: /discord-presence [settings|status|on|off|refresh|hide|show|context on|context off]";
 
 // Subagent sessions run in this process with rebound copies of this factory, so they share this module.
 // Each one reports while its agent loop runs (nested subagents included); the main session displays the total.
@@ -273,7 +289,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let modes = ""; // formatted active omp modes, see formatModes
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
-	let { enabled, hiddenProjects, showContext } = readGlobalState();
+	let { enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes } = readGlobalState();
 	let cwd = process.cwd();
 
 	let presence: PresenceState = {
@@ -306,7 +322,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 		// Gateway providers already prefix the id ("amanai" + "amanai/claude-haiku-4.5"); don't repeat it.
 		const model = presence.model && (rawId.startsWith(`${rawProvider}/`) ? rawId : `${rawProvider}/${rawId}`);
 		const effort = pi.getThinkingLevel();
-		const modelInfo = model && (effort && effort !== "inherit" ? `${model} · effort: ${effort}` : model);
+		const modelInfo =
+			showModel && model ? (effort && effort !== "inherit" ? `${model} · effort: ${effort}` : model) : undefined;
 		const modelSuffix = modelInfo ? ` · ${modelInfo}` : "";
 		const contextSuffix = showContext && presence.contextPercent !== undefined ? ` · context ${presence.contextPercent}%` : "";
 		const label = STATUS_LABELS[presence.status];
@@ -323,10 +340,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 			startTimestamp: new Date(presence.startedAt),
 			largeImageKey,
 			largeImageText: largeImageKey ? `oh-my-pi coding agent v${VERSION}` : undefined,
-			smallImageKey: iconKey,
-			smallImageText: iconKey && modelInfo,
+			// The logo names the model's maker, so it follows the model setting.
+			smallImageKey: showModel ? iconKey : undefined,
+			smallImageText: showModel && iconKey ? modelInfo : undefined,
 			// Discord never shows your own buttons to you; other people see them on your profile.
-			buttons: "url" in repo && !hidden ? [{ label: "View on GitHub", url: repo.url }] : undefined,
+			buttons: showButton && "url" in repo && !hidden ? [{ label: "View on GitHub", url: repo.url }] : undefined,
 			instance: false,
 		};
 	};
@@ -352,18 +370,22 @@ export default function discordPresence(pi: ExtensionAPI) {
 		updateTimer = setTimeout(() => void flushPresence(), delay);
 	};
 
+	// Arms the "away" timer from idleSince, so a changed awayMinutes applies to the current idle stretch.
+	const armAwayTimer = () => {
+		clearTimeout(awayTimer);
+		if (presence.status !== "idle" || idleSince === undefined || awayMinutes <= 0) return;
+		const remaining = Math.max(0, idleSince + awayMinutes * 60_000 - Date.now());
+		awayTimer = setTimeout(() => updatePresence({ status: "away" }), remaining);
+		awayTimer.unref(); // never keep omp (e.g. print mode) alive just to flip to "away"
+	};
+
 	const updatePresence = (patch: Partial<PresenceState>) => {
 		presence = { ...presence, ...patch };
 		// Any status change restarts the idle clock; only a quiet "idle" turns into "away".
 		if (patch.status) {
-			clearTimeout(awayTimer);
-			if (patch.status === "idle") {
-				idleSince = Date.now();
-				awayTimer = setTimeout(() => updatePresence({ status: "away" }), AWAY_AFTER_MS);
-				awayTimer.unref(); // never keep omp (e.g. print mode) alive just to flip to "away"
-			} else if (patch.status !== "away") {
-				idleSince = undefined;
-			}
+			if (patch.status === "idle") idleSince = Date.now();
+			else if (patch.status !== "away") idleSince = undefined;
+			armAwayTimer();
 		}
 		schedulePresenceUpdate();
 	};
@@ -425,9 +447,14 @@ export default function discordPresence(pi: ExtensionAPI) {
 	const applyGlobalState = async (next: GlobalState) => {
 		const wasHidden = projectHidden();
 		hiddenProjects = next.hiddenProjects;
-		const contextChanged = showContext !== next.showContext;
-		showContext = next.showContext;
-		if (projectHidden() !== wasHidden || contextChanged) await flushPresence();
+		const displayChanged =
+			showContext !== next.showContext || showModel !== next.showModel || showButton !== next.showButton;
+		({ showContext, showModel, showButton } = next);
+		if (awayMinutes !== next.awayMinutes) {
+			awayMinutes = next.awayMinutes;
+			armAwayTimer();
+		}
+		if (projectHidden() !== wasHidden || displayChanged) await flushPresence();
 
 		if (enabled === next.enabled) return;
 		enabled = next.enabled;
@@ -466,20 +493,26 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const activity = lastActivity ?? buildActivity();
 		const iconKey = activity.smallImageKey;
 		const uploaded = iconKey ? await fetchUploadedAssets() : undefined;
-		const logo = !iconKey
-			? "none (no lobe-icons rule matches this model)"
-			: `${iconKey} ${uploaded === undefined ? "(could not check Art Assets)" : uploaded.has(iconKey) ? "✓ uploaded" : "✗ not uploaded as an Art Asset"}`;
+		const logo = !showModel
+			? "hidden (model hidden in settings)"
+			: !iconKey
+				? "none (no lobe-icons rule matches this model)"
+				: `${iconKey} ${uploaded === undefined ? "(could not check Art Assets)" : uploaded.has(iconKey) ? "✓ uploaded" : "✗ not uploaded as an Art Asset"}`;
 		const hidden = projectHidden();
-		const button = hidden
-			? "none (project hidden)"
-			: "url" in repo
-				? `View on GitHub → ${repo.url}`
-				: `none (${repo.reason})`;
+		const button = !showButton
+			? "none (turned off in settings)"
+			: hidden
+				? "none (project hidden)"
+				: "url" in repo
+					? `View on GitHub → ${repo.url}`
+					: `none (${repo.reason})`;
 		const away =
 			presence.status === "away"
 				? `away (idle ${formatDuration(Date.now() - (idleSince ?? Date.now()))})`
 				: idleSince !== undefined
-					? `idle ${formatDuration(Date.now() - idleSince)}, away in ${formatDuration(Math.max(0, idleSince + AWAY_AFTER_MS - Date.now()))}`
+					? awayMinutes > 0
+						? `idle ${formatDuration(Date.now() - idleSince)}, away in ${formatDuration(Math.max(0, idleSince + awayMinutes * 60_000 - Date.now()))}`
+						: `idle ${formatDuration(Date.now() - idleSince)}, away never`
 					: "active";
 		const context = readContextPercent(ctx);
 		return [
@@ -501,12 +534,64 @@ export default function discordPresence(pi: ExtensionAPI) {
 			.join("\n");
 	};
 
+	const setProjectHidden = async (projectCwd: string, hide: boolean) => {
+		const { hiddenProjects: current } = readGlobalState();
+		if (hide === isProjectHidden(projectCwd, current)) return;
+		// Showing removes every entry covering this cwd, including a hidden parent directory.
+		const next = hide ? [...current, projectCwd] : current.filter((project) => !isProjectHidden(projectCwd, [project]));
+		await applyGlobalState(writeGlobalState({ hiddenProjects: next }));
+	};
+
+	const AWAY_CHOICES = [5, 10, 15, 30, 60, 0];
+	const describeAway = (minutes: number) => (minutes > 0 ? `${minutes} min` : "never");
+
+	/** Interactive settings menu; every change is saved globally and applied live to all sessions. */
+	const openSettings = async (ctx: ExtensionContext) => {
+		const toggle = (on: boolean, yes = "shown", no = "hidden") => (on ? yes : no);
+		let index = 0;
+		for (;;) {
+			const state = readGlobalState();
+			const hidden = isProjectHidden(ctx.cwd, state.hiddenProjects);
+			const items = [
+				{ label: `Presence: ${toggle(state.enabled, "on", "off")}`, description: "Show omp activity on Discord (all sessions)" },
+				{
+					label: `This project: ${toggle(!hidden, "visible", "hidden")}`,
+					description: `Show "${normalizeProjectName(ctx.cwd)}" or "${PRIVATE_PROJECT_LABEL}"`,
+				},
+				{ label: `Model, effort & logo: ${toggle(state.showModel)}`, description: "e.g. anthropic/claude-opus · effort: high" },
+				{ label: `GitHub button: ${toggle(state.showButton)}`, description: "View on GitHub, public repos only" },
+				{ label: `Context usage: ${toggle(state.showContext)}`, description: "e.g. context 42%" },
+				{ label: `Away after: ${describeAway(state.awayMinutes)}`, description: "Idle time before the status turns away" },
+				{ label: "Done" },
+			];
+			const choice = await ctx.ui.select("Discord presence settings", items, {
+				initialIndex: index,
+				helpText: "Enter changes the setting · Esc closes",
+			});
+			index = items.findIndex((item) => item.label === choice);
+			if (index === -1 || index === items.length - 1) return;
+
+			if (index === 0) await applyGlobalState(writeGlobalState({ enabled: !state.enabled }));
+			else if (index === 1) await setProjectHidden(ctx.cwd, !hidden);
+			else if (index === 2) await applyGlobalState(writeGlobalState({ showModel: !state.showModel }));
+			else if (index === 3) await applyGlobalState(writeGlobalState({ showButton: !state.showButton }));
+			else if (index === 4) await applyGlobalState(writeGlobalState({ showContext: !state.showContext }));
+			else {
+				const labels = AWAY_CHOICES.map((minutes) => describeAway(minutes) + (minutes === DEFAULT_STATE.awayMinutes ? " (default)" : ""));
+				const picked = await ctx.ui.select("Away after", labels, {
+					initialIndex: Math.max(0, AWAY_CHOICES.indexOf(state.awayMinutes)),
+				});
+				const minutes = AWAY_CHOICES[labels.indexOf(picked ?? "")];
+				if (minutes !== undefined) await applyGlobalState(writeGlobalState({ awayMinutes: minutes }));
+			}
+		}
+	};
+
 	pi.registerCommand("discord-presence", {
 		description: `toggle Discord Rich Presence for all omp sessions, or hide/show this project's name. ${USAGE}`,
 		handler: async (args, ctx) => {
 			cwd = ctx.cwd;
-			const current = readGlobalState();
-			await applyGlobalState(current);
+			await applyGlobalState(readGlobalState());
 			const [verb = "", arg] = args.trim().toLowerCase().split(/\s+/);
 			const action = verb || (enabled ? "off" : "on");
 
@@ -517,21 +602,22 @@ export default function discordPresence(pi: ExtensionAPI) {
 					ctx.ui.notify(`discord rich presence ${action === "on" ? "enabled" : "disabled"} globally.`, "info");
 					return;
 				case "hide":
-				case "private": {
-					if (!projectHidden()) {
-						await applyGlobalState(writeGlobalState({ hiddenProjects: [...current.hiddenProjects, ctx.cwd] }));
-					}
+				case "private":
+					await setProjectHidden(ctx.cwd, true);
 					ctx.ui.notify(`project name hidden on discord; showing "${PRIVATE_PROJECT_LABEL}" instead.`, "info");
 					return;
-				}
 				case "show":
-				case "public": {
-					// Unhide every entry covering this cwd, including a hidden parent directory.
-					const remaining = current.hiddenProjects.filter((project) => !isProjectHidden(ctx.cwd, [project]));
-					await applyGlobalState(writeGlobalState({ hiddenProjects: remaining }));
+				case "public":
+					await setProjectHidden(ctx.cwd, false);
 					ctx.ui.notify(`project name "${normalizeProjectName(ctx.cwd)}" visible on discord.`, "info");
 					return;
-				}
+				case "settings":
+					if (!ctx.hasUI) {
+						ctx.ui.notify("settings needs the interactive TUI; edit the settings file shown by /discord-presence status.", "warning");
+						return;
+					}
+					await openSettings(ctx);
+					return;
 				case "refresh":
 					await flushPresence();
 					ctx.ui.notify("discord rich presence refreshed.", "info");
@@ -565,7 +651,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		shuttingDown = false;
 		cwd = ctx.cwd;
 		watchGlobalState();
-		({ enabled, hiddenProjects, showContext } = readGlobalState());
+		({ enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes } = readGlobalState());
 		updatePresence({
 			status: "idle",
 			model: ctx.model,
