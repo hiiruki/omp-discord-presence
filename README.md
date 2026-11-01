@@ -11,7 +11,7 @@ using tool · bash · anthropic/claude-opus-4 · effort: high
 [ View on GitHub ]
 ```
 
-Status changes reach Discord within about 4 seconds. Updates are spaced out because Discord accepts only 5 activity updates per 20 seconds, and the latest state is always sent last. While tools run in parallel, the status stays on "using tool" until the last one finishes. The effort is read whenever the status updates, so a change appears with the next prompt.
+Status changes reach Discord within about 4 seconds. Updates are spaced out because Discord accepts only 5 activity updates per 20 seconds, and the latest state is always sent last. While tools run in parallel, the status stays on "using tool" until the last one finishes. Automatic context compaction and provider retries get their own status (`compacting context`, `retrying · attempt 2/5`). The retry's error message is never shown. The effort is read whenever the status updates, so a change appears with the next prompt.
 
 ### GitHub button
 
@@ -72,6 +72,98 @@ Under WSL, Discord runs on Windows and only exposes the named pipe `\\.\pipe\dis
 3. When the session that owns the bridge exits, other running sessions reconnect within 15 seconds and one of them takes over.
 
 Requirements: WSL interop must be enabled (the default), and Discord must be the stable client. PTB and Canary use a different pipe and aren't bridged.
+
+## How it works
+
+### Overview
+
+```mermaid
+flowchart TD
+    subgraph omp["omp session"]
+        E1["session_start"]
+        E2["agent_start / agent_end"]
+        E3["tool_execution_start / end"]
+        E6["auto_compaction / auto_retry<br/>start / end"]
+        E4["/discord-presence command"]
+        E5["session_shutdown"]
+    end
+
+    subgraph plugin["discord-presence plugin (main session only)"]
+        P["presence state<br/>status · tool · model · start time"]
+        S[("~/.omp/agent/<br/>discord-presence-state.json<br/>enabled · hiddenProjects")]
+        T["throttle<br/>0.75 s debounce, 4 s spacing"]
+        B["build activity"]
+    end
+
+    subgraph inputs["read when building"]
+        V["omp version"]
+        M["model + effort"]
+        L["brand logo key"]
+        G["public GitHub URL<br/>(git origin + GitHub API)"]
+    end
+
+    E1 & E2 & E3 & E6 --> P
+    E4 -- "on / off / hide / show" --> S
+    S -- "file watcher<br/>(all sessions)" --> P
+    P --> T --> B
+    V & M & L & G --> B
+    B -- "SET_ACTIVITY" --> RPC["discord-rpc client"]
+    RPC --> D["Discord desktop app"]
+    E5 -- "clear activity, close bridge" --> RPC
+```
+
+Subagent sessions (task tool, eval agents) also load the plugin, but they return at `session_start` and never connect, so they can't overwrite or clear the main session's status.
+
+### Connecting to Discord
+
+```mermaid
+flowchart TD
+    C["connect()"] --> Q{"does $XDG_RUNTIME_DIR/discord-ipc-0<br/>answer?"}
+    Q -- "yes: Linux Discord, socat,<br/>or another omp session" --> R["discord-rpc login"]
+    Q -- "no" --> W{"running in WSL?"}
+    W -- "no: Windows / macOS / Linux" --> R
+    W -- "yes" --> BR["remove stale socket,<br/>serve discord-ipc-0"]
+    BR --> R
+    BR -. "each connection" .-> NP["bin/npiperelay.exe"]
+    NP -. "\\.\pipe\discord-ipc-0" .-> DW["Discord on Windows"]
+    R -- "READY" --> OK["connected: send activity"]
+    R -- "error / timeout" --> RT["close client,<br/>retry in 15 s"]
+    OK -- "disconnected" --> RT
+    RT --> C
+```
+
+If the session that owns the WSL bridge exits, the other sessions lose their connection, retry, and one of them starts a new bridge.
+
+### Status states
+
+```mermaid
+stateDiagram-v2
+    [*] --> offline: plugin loaded
+    offline --> idle: session_start
+    idle --> working: agent_start
+    working --> tool: tool_execution_start
+    tool --> tool: another tool starts / ends<br/>while one is still running
+    tool --> working: last running tool ends
+    working --> idle: agent_end
+    tool --> idle: agent_end
+    working --> retrying: auto_retry_start
+    retrying --> working: auto_retry_end
+    idle --> compacting: auto_compaction_start
+    working --> compacting: auto_compaction_start
+    tool --> compacting: auto_compaction_start
+    compacting --> idle: auto_compaction_end<br/>(agent not running)
+    compacting --> working: auto_compaction_end<br/>(agent running)
+    compacting --> tool: auto_compaction_end<br/>(a tool is still running)
+```
+
+| Status | Text on Discord |
+| --- | --- |
+| `offline` | starting |
+| `idle` | idle |
+| `working` | thinking |
+| `tool` | using tool · `<tool name>` |
+| `compacting` | compacting context |
+| `retrying` | retrying · attempt `<n>/<max>` |
 
 ## Commands
 

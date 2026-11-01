@@ -42,18 +42,21 @@ const MIN_PRESENCE_UPDATE_INTERVAL_MS = 4_000;
 const DISCORD_TEXT_LIMIT = 128;
 const PRIVATE_PROJECT_LABEL = "private project";
 
-type PresenceStatus = "idle" | "working" | "tool" | "offline";
+type PresenceStatus = "idle" | "working" | "tool" | "compacting" | "retrying" | "offline";
 
 const STATUS_LABELS: Record<PresenceStatus, string> = {
 	idle: "idle",
 	working: "thinking",
 	tool: "using tool",
+	compacting: "compacting context",
+	retrying: "retrying",
 	offline: "starting",
 };
 
 type PresenceState = {
 	status: PresenceStatus;
-	toolName?: string;
+	/** Shown after the status label: the tool name, or the retry attempt. */
+	detail?: string;
 	model?: { provider: string; id: string };
 	startedAt: number;
 };
@@ -200,6 +203,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let updateTimer: NodeJS.Timeout | undefined;
 	let lastFlushAt = 0;
 	const runningTools = new Map<string, string>(); // toolCallId -> toolName
+	let agentRunning = false;
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
 	let { enabled, hiddenProjects } = readGlobalState();
@@ -238,7 +242,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const modelInfo = model && (effort && effort !== "inherit" ? `${model} · effort: ${effort}` : model);
 		const modelSuffix = modelInfo ? ` · ${modelInfo}` : "";
 		const label = STATUS_LABELS[presence.status];
-		const state = presence.toolName ? `${label} · ${presence.toolName}${modelSuffix}` : `${label}${modelSuffix}`;
+		const state = presence.detail ? `${label} · ${presence.detail}${modelSuffix}` : `${label}${modelSuffix}`;
 		const id = presence.model?.id.toLowerCase() ?? "";
 		const provider = presence.model?.provider.toLowerCase() ?? "";
 		const brand =
@@ -354,7 +358,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 		updatePresence({
 			status: "idle",
-			toolName: undefined,
+			detail: undefined,
 			startedAt: Date.now(),
 		});
 		await connect();
@@ -441,11 +445,19 @@ export default function discordPresence(pi: ExtensionAPI) {
 		if (enabled) void connect();
 	});
 
+	// What the status returns to once a tool, compaction or retry finishes.
+	const currentActivity = (): Pick<PresenceState, "status" | "detail"> => {
+		const tool = [...runningTools.values()].at(-1);
+		if (tool) return { status: "tool", detail: tool };
+		return { status: agentRunning ? "working" : "idle", detail: undefined };
+	};
+
 	pi.on("agent_start", async (_event, ctx) => {
 		runningTools.clear();
+		agentRunning = true;
 		updatePresence({
 			status: "working",
-			toolName: undefined,
+			detail: undefined,
 			model: ctx.model,
 			startedAt: Date.now(),
 		});
@@ -454,20 +466,37 @@ export default function discordPresence(pi: ExtensionAPI) {
 	// Tools can run in parallel: stay on "using tool" until the last one finishes.
 	pi.on("tool_execution_start", async (event) => {
 		runningTools.set(event.toolCallId, event.toolName);
-		updatePresence({ status: "tool", toolName: event.toolName });
+		updatePresence({ status: "tool", detail: event.toolName });
 	});
 
 	pi.on("tool_execution_end", async (event) => {
 		runningTools.delete(event.toolCallId);
-		const stillRunning = [...runningTools.values()].at(-1);
-		updatePresence(stillRunning ? { status: "tool", toolName: stillRunning } : { status: "working", toolName: undefined });
+		updatePresence(currentActivity());
+	});
+
+	pi.on("auto_compaction_start", async () => {
+		updatePresence({ status: "compacting", detail: undefined });
+	});
+
+	pi.on("auto_compaction_end", async () => {
+		updatePresence(currentActivity());
+	});
+
+	// The error message is not shown: it can contain request details.
+	pi.on("auto_retry_start", async (event) => {
+		updatePresence({ status: "retrying", detail: `attempt ${event.attempt}/${event.maxAttempts}` });
+	});
+
+	pi.on("auto_retry_end", async () => {
+		updatePresence(currentActivity());
 	});
 
 	pi.on("agent_end", async () => {
 		runningTools.clear();
+		agentRunning = false;
 		updatePresence({
 			status: "idle",
-			toolName: undefined,
+			detail: undefined,
 		});
 	});
 
