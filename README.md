@@ -19,6 +19,8 @@ After 15 minutes without a prompt, `idle` turns into `away`. The next prompt swi
 
 Context-window usage can be shown at the end of the status (`… · effort: high · context 42%`). It is **off by default**. Turn it on with `/discord-presence context on`. The value updates after every turn.
 
+While subagents (task tool, eval agents) are working, the status shows how many are running, e.g. `using tool · wait · 2 subagents · …`. Nested subagents are included. The count drops as each one finishes.
+
 ### GitHub button
 
 When the project is a git repository whose `origin` remote points to a **public** GitHub repo, the status gets a **View on GitHub** button linking to it.
@@ -59,7 +61,7 @@ npm publish
 
 The package ships only `extensions/`, `bin/` and `assets/`, about 0.9 MB. `@oh-my-pi/pi-coding-agent` is an optional peer, so installing the plugin doesn't pull a second copy of omp.
 
-Only the main session talks to Discord; subagent sessions (task tool, eval agents) are ignored.
+Only the main session talks to Discord; subagent sessions (task tool, eval agents) never connect and only report how many of them are running.
 
 ## Platform support
 
@@ -119,7 +121,7 @@ flowchart TD
     E5 -- "clear activity, close bridge" --> RPC
 ```
 
-Subagent sessions (task tool, eval agents) also load the plugin, but they return at `session_start` and never connect, so they can't overwrite or clear the main session's status.
+Subagent sessions (task tool, eval agents) also load the plugin, but they never connect, so they can't overwrite or clear the main session's status. They run in the same process and share the plugin module. Each one bumps a shared counter while its agent loop runs, and the main session shows that count.
 
 ### Connecting to Discord
 

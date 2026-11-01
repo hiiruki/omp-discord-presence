@@ -214,12 +214,29 @@ const startWslBridge = async (): Promise<Server | undefined> => {
 
 const USAGE = "usage: /discord-presence [on|off|status|refresh|hide|show|context on|context off]";
 
+// Subagent sessions run in this process with rebound copies of this factory, so they share this module.
+// Each one reports while its agent loop runs (nested subagents included); the main session displays the total.
+let runningSubagents = 0;
+const subagentListeners = new Set<() => void>();
+const changeRunningSubagents = (delta: 1 | -1) => {
+	runningSubagents = Math.max(0, runningSubagents + delta);
+	for (const listener of subagentListeners) listener();
+};
+
 const readContextPercent = (ctx: ExtensionContext): number | undefined => {
 	const percent = ctx.getContextUsage()?.percent;
 	return percent !== undefined && Number.isFinite(percent) ? Math.round(percent) : undefined;
 };
 
 export default function discordPresence(pi: ExtensionAPI) {
+	let isSubagent = false;
+	let subagentRunning = false;
+	const setSubagentRunning = (running: boolean) => {
+		if (subagentRunning === running) return;
+		subagentRunning = running;
+		changeRunningSubagents(running ? 1 : -1);
+	};
+	const onSubagentsChanged = () => schedulePresenceUpdate();
 	let rpc: DiscordRpcClient | undefined;
 	let connected = false;
 	let reconnectTimer: NodeJS.Timeout | undefined;
@@ -271,7 +288,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const modelSuffix = modelInfo ? ` · ${modelInfo}` : "";
 		const contextSuffix = showContext && presence.contextPercent !== undefined ? ` · context ${presence.contextPercent}%` : "";
 		const label = STATUS_LABELS[presence.status];
-		const state = `${presence.detail ? `${label} · ${presence.detail}` : label}${modelSuffix}${contextSuffix}`;
+		const subagents = runningSubagents ? ` · ${runningSubagents} subagent${runningSubagents === 1 ? "" : "s"}` : "";
+		const state = `${presence.detail ? `${label} · ${presence.detail}` : label}${subagents}${modelSuffix}${contextSuffix}`;
 		const id = presence.model?.id.toLowerCase() ?? "";
 		const provider = presence.model?.provider.toLowerCase() ?? "";
 		const brand =
@@ -470,7 +488,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		// Factories are rebound to every subagent session; only the main session owns the Discord connection.
-		if (ctx.agent.kind !== "main") return;
+		if (ctx.agent.kind !== "main") {
+			isSubagent = true;
+			return;
+		}
+		subagentListeners.add(onSubagentsChanged);
 		shuttingDown = false;
 		cwd = ctx.cwd;
 		watchGlobalState();
@@ -503,6 +525,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	};
 
 	pi.on("agent_start", async (_event, ctx) => {
+		if (isSubagent) return setSubagentRunning(true);
 		runningTools.clear();
 		agentRunning = true;
 		updatePresence({
@@ -547,6 +570,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
+		if (isSubagent) return setSubagentRunning(false);
 		runningTools.clear();
 		agentRunning = false;
 		updatePresence({
@@ -562,6 +586,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async () => {
+		if (isSubagent) {
+			setSubagentRunning(false); // a subagent aborted mid-run never sends agent_end
+			return;
+		}
+		subagentListeners.delete(onSubagentsChanged);
 		shuttingDown = true;
 		clearTimeout(awayTimer);
 		stateWatcher?.close();
