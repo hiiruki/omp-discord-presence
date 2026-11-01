@@ -15,6 +15,8 @@ Status changes reach Discord within about 4 seconds. Updates are spaced out beca
 
 Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
 
+After 15 minutes without a prompt, `idle` turns into `away`. The next prompt switches it back to `thinking`.
+
 ### GitHub button
 
 When the project is a git repository whose `origin` remote points to a **public** GitHub repo, the status gets a **View on GitHub** button linking to it.
@@ -151,6 +153,8 @@ stateDiagram-v2
     tool --> idle: agent_end
     working --> retrying: auto_retry_start
     retrying --> working: auto_retry_end
+    idle --> away: 15 min without a prompt
+    away --> working: agent_start
     idle --> compacting: auto_compaction_start
     working --> compacting: auto_compaction_start
     tool --> compacting: auto_compaction_start
@@ -163,6 +167,7 @@ stateDiagram-v2
 | --- | --- |
 | `offline` | starting |
 | `idle` | idle |
+| `away` | away (idle for 15 minutes) |
 | `working` | thinking |
 | `tool` | using tool · `<tool name>` |
 | `compacting` | compacting context |

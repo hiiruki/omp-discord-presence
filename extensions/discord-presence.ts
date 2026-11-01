@@ -39,10 +39,12 @@ const PRESENCE_UPDATE_DEBOUNCE_MS = 750;
 // Discord accepts at most 5 activity updates per 20 s; more are acknowledged but may never render,
 // which can leave a stale "using tool" on screen. Space updates out and always send the latest state.
 const MIN_PRESENCE_UPDATE_INTERVAL_MS = 4_000;
+// shortcut: fixed 15 min; make it a plugin setting once settings exist.
+const AWAY_AFTER_MS = 15 * 60_000;
 const DISCORD_TEXT_LIMIT = 128;
 const PRIVATE_PROJECT_LABEL = "private project";
 
-type PresenceStatus = "idle" | "working" | "tool" | "compacting" | "retrying" | "offline";
+type PresenceStatus = "idle" | "away" | "working" | "tool" | "compacting" | "retrying" | "offline";
 
 const STATUS_LABELS: Record<PresenceStatus, string> = {
 	idle: "idle",
@@ -50,6 +52,7 @@ const STATUS_LABELS: Record<PresenceStatus, string> = {
 	tool: "using tool",
 	compacting: "compacting context",
 	retrying: "retrying",
+	away: "away",
 	offline: "starting",
 };
 
@@ -211,6 +214,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let wslBridge: Server | undefined;
 	let updateTimer: NodeJS.Timeout | undefined;
 	let lastFlushAt = 0;
+	let awayTimer: NodeJS.Timeout | undefined;
 	const runningTools = new Map<string, string>(); // toolCallId -> toolName
 	let agentRunning = false;
 	let modes = ""; // formatted active omp modes, see formatModes
@@ -296,6 +300,14 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	const updatePresence = (patch: Partial<PresenceState>) => {
 		presence = { ...presence, ...patch };
+		// Any status change restarts the idle clock; only a quiet "idle" turns into "away".
+		if (patch.status) {
+			clearTimeout(awayTimer);
+			if (patch.status === "idle") {
+				awayTimer = setTimeout(() => updatePresence({ status: "away" }), AWAY_AFTER_MS);
+				awayTimer.unref(); // never keep omp (e.g. print mode) alive just to flip to "away"
+			}
+		}
 		schedulePresenceUpdate();
 	};
 
@@ -518,6 +530,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", async () => {
 		shuttingDown = true;
+		clearTimeout(awayTimer);
 		stateWatcher?.close();
 		stateWatcher = undefined;
 		await clearDiscordPresence();
