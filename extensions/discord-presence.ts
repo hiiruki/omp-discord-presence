@@ -6,8 +6,27 @@ import { basename, dirname, join, sep } from "node:path";
 
 const CLIENT_ID = process.env.OMP_DISCORD_CLIENT_ID ?? "1566329796068384808";
 const LARGE_IMAGE_KEY = process.env.OMP_DISCORD_LARGE_IMAGE_KEY;
-const SMALL_IDLE_IMAGE_KEY = process.env.OMP_DISCORD_SMALL_IDLE_IMAGE_KEY;
-const SMALL_WORKING_IMAGE_KEY = process.env.OMP_DISCORD_SMALL_WORKING_IMAGE_KEY;
+// Values are Discord Art Asset keys: upload assets/models/<key>.png to the app under the same name.
+// Matched against the model id first (Claude via OpenRouter/Copilot still shows Claude), then the provider.
+const BRAND_ICONS: [RegExp, string][] = [
+	[/claude|anthropic/, "claude"],
+	[/gpt|^o\d|codex|openai/, "openai"],
+	[/gemini|gemma|google/, "gemini"],
+	[/deepseek/, "deepseek"],
+	[/grok|xai/, "xai"],
+	[/stral|mixtral/, "mistral"],
+	[/qwen|qwq/, "qwen"],
+	[/kimi|moonshot/, "moonshot"],
+	[/glm|zhipu|zai/, "zhipu"],
+	[/minimax/, "minimax"],
+	[/(?<!o)llama/, "meta"],
+	[/openrouter/, "openrouter"],
+	[/copilot/, "githubcopilot"],
+	[/ollama/, "ollama"],
+	[/groq/, "groq"],
+	[/cerebras/, "cerebras"],
+	[/bedrock/, "bedrock"],
+];
 const GLOBAL_STATE_FILE = join(homedir(), ".omp", "agent", "discord-presence-state.json");
 const RECONNECT_DELAY_MS = 15_000;
 const PRESENCE_UPDATE_DEBOUNCE_MS = 750;
@@ -20,7 +39,7 @@ type PresenceState = {
 	status: PresenceStatus;
 	state: string;
 	toolName?: string;
-	model?: string;
+	model?: { provider: string; id: string };
 	startedAt: number;
 };
 
@@ -72,12 +91,23 @@ const writeGlobalState = (patch: Partial<GlobalState>): GlobalState => {
 	return next;
 };
 
+const fetchAppIconUrl = async (): Promise<string | undefined> => {
+	try {
+		const response = await fetch(`https://discord.com/api/v10/applications/${CLIENT_ID}/rpc`);
+		const app = (await response.json()) as { icon?: string | null };
+		return app.icon ? `https://cdn.discordapp.com/app-icons/${CLIENT_ID}/${app.icon}.png?size=512` : undefined;
+	} catch {
+		return undefined;
+	}
+};
+
 const USAGE = "usage: /discord-presence [on|off|status|refresh|hide|show]";
 
 export default function discordPresence(pi: ExtensionAPI) {
 	let rpc: DiscordRpcClient | undefined;
 	let connected = false;
 	let reconnectTimer: NodeJS.Timeout | undefined;
+	let appIconUrl: string | undefined;
 	let updateTimer: NodeJS.Timeout | undefined;
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
@@ -111,21 +141,26 @@ export default function discordPresence(pi: ExtensionAPI) {
 	};
 
 	const buildActivity = (): DiscordRPC.Presence => {
-		const modelSuffix = presence.model ? ` · ${presence.model}` : "";
+		const model = presence.model && `${presence.model.provider}/${presence.model.id}`;
+		const modelSuffix = model ? ` · ${model}` : "";
 		const state = presence.toolName
 			? `${presence.state} · ${presence.toolName}${modelSuffix}`
 			: `${presence.state}${modelSuffix}`;
-		const smallImageKey = presence.status === "idle" ? SMALL_IDLE_IMAGE_KEY : SMALL_WORKING_IMAGE_KEY;
+		const id = presence.model?.id.toLowerCase() ?? "";
+		const provider = presence.model?.provider.toLowerCase() ?? "";
+		const brand =
+			BRAND_ICONS.find(([pattern]) => pattern.test(id)) ?? BRAND_ICONS.find(([pattern]) => pattern.test(provider));
 		const project = projectHidden() ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
+		const largeImageKey = LARGE_IMAGE_KEY ?? appIconUrl;
 
 		return {
 			details: truncateDiscordText(`omp · ${project}`),
 			state: truncateDiscordText(state),
 			startTimestamp: new Date(presence.startedAt),
-			largeImageKey: LARGE_IMAGE_KEY,
-			largeImageText: LARGE_IMAGE_KEY ? "oh-my-pi coding agent" : undefined,
-			smallImageKey,
-			smallImageText: smallImageKey ? (presence.status === "idle" ? "idle" : "working") : undefined,
+			largeImageKey,
+			largeImageText: largeImageKey ? "oh-my-pi coding agent" : undefined,
+			smallImageKey: brand?.[1],
+			smallImageText: brand && model,
 			instance: false,
 		};
 	};
@@ -286,8 +321,13 @@ export default function discordPresence(pi: ExtensionAPI) {
 		updatePresence({
 			status: "idle",
 			state: "idle",
-			model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+			model: ctx.model,
 			startedAt: Date.now(),
+		});
+		// Discord hides the small (brand) image without a large one; default to the app's own icon.
+		if (!LARGE_IMAGE_KEY && !appIconUrl) void fetchAppIconUrl().then((url) => {
+			appIconUrl = url;
+			schedulePresenceUpdate();
 		});
 		if (enabled) void connect();
 	});
@@ -297,7 +337,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			status: "working",
 			state: "thinking",
 			toolName: undefined,
-			model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+			model: ctx.model,
 			startedAt: Date.now(),
 		});
 	});

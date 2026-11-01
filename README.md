@@ -65,17 +65,23 @@ Discord IPC uses a Unix socket (`$XDG_RUNTIME_DIR/discord-ipc-0`). Under WSL, Di
 
 The activity name shown by Discord comes from the Discord Developer Portal application name. The extension cannot change that through RPC.
 
-This repo includes omp logo assets:
+### Images
 
-- `assets/omp-logo.svg`
-- `assets/omp-logo.png`
+- **Large image:** the Discord application's own icon, fetched from Discord at startup.
+- **Small image:** the logo of the model's maker (Claude, OpenAI, Gemini, DeepSeek, xAI, Mistral, Qwen, Moonshot, Zhipu, MiniMax, Meta), chosen from omp's active model. The plugin matches on the model id first, so Claude through OpenRouter or Copilot still shows the Claude logo. If that fails, it falls back to the provider (OpenRouter, GitHub Copilot, Ollama, Groq, Cerebras, Bedrock). Hover the logo to see the full model name. Unknown models show no small image. A model switch shows up when the next prompt starts.
 
-Upload `assets/omp-logo.png` to the Discord application's Rich Presence assets, then set the uploaded asset key with env vars:
+The logos live in `assets/models/` (640×640 PNGs from [`@lobehub/icons-static-png`](https://www.npmjs.com/package/@lobehub/icons-static-png), MIT). Discord can't read local files, so upload them once as Art Assets:
+
+1. Open the [Developer Portal](https://discord.com/developers/applications), select the app, then go to **Rich Presence → Art Assets**.
+2. Click **Add Image(s)** and select every file in `assets/models/`.
+3. Keep each asset name equal to its file name without `.png` (for example `anthropic`, `githubcopilot`), then **Save Changes**.
+
+New assets can take a few minutes to appear. To add a brand, put `<key>.png` (at least 512×512) in `assets/models/`, add a `[/pattern/, "<key>"]` row to `BRAND_ICONS` in `extensions/discord-presence.ts`, and upload the image.
+
+To use your own large image instead, upload one as an Art Asset (at least 512×512) and set its key, or use any image URL:
 
 ```bash
 export OMP_DISCORD_LARGE_IMAGE_KEY=omp-logo
-export OMP_DISCORD_SMALL_IDLE_IMAGE_KEY=omp-logo
-export OMP_DISCORD_SMALL_WORKING_IMAGE_KEY=omp-logo
 ```
 
 You can override the app id too:
