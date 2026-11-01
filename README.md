@@ -2,16 +2,18 @@
 
 Discord Rich Presence extension for omp (oh-my-pi) coding agent.
 
-Discord shows the installed omp version, the project name, the current state (idle / thinking / using tool), the active tool, the model and its effort (thinking level), with the model maker's logo as a small badge:
+Discord shows the installed omp version, the project name, any active omp mode (plan, goal, loop, vibe), the current state (idle / thinking / using tool), the active tool, the model and its effort (thinking level), with the model maker's logo as a small badge:
 
 ```text
 OH MY PI
-omp v18.15.0 · my-project
+omp v18.15.0 · my-project · plan mode
 using tool · bash · anthropic/claude-opus-4 · effort: high
 [ View on GitHub ]
 ```
 
 Status changes reach Discord within about 4 seconds. Updates are spaced out because Discord accepts only 5 activity updates per 20 seconds, and the latest state is always sent last. While tools run in parallel, the status stays on "using tool" until the last one finishes. Automatic context compaction and provider retries get their own status (`compacting context`, `retrying · attempt 2/5`). The retry's error message is never shown. The effort is read whenever the status updates, so a change appears with the next prompt.
+
+Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
 
 ### GitHub button
 
@@ -84,6 +86,7 @@ flowchart TD
         E2["agent_start / agent_end"]
         E3["tool_execution_start / end"]
         E6["auto_compaction / auto_retry<br/>start / end"]
+        E7["mode_changed<br/>(plan / goal / loop / vibe)"]
         E4["/discord-presence command"]
         E5["session_shutdown"]
     end
@@ -102,7 +105,7 @@ flowchart TD
         G["public GitHub URL<br/>(git origin + GitHub API)"]
     end
 
-    E1 & E2 & E3 & E6 --> P
+    E1 & E2 & E3 & E6 & E7 --> P
     E4 -- "on / off / hide / show" --> S
     S -- "file watcher<br/>(all sessions)" --> P
     P --> T --> B

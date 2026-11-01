@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import type { ExtensionAPI, SessionModeState } from "@oh-my-pi/pi-coding-agent";
 import DiscordRPC from "discord-rpc";
 // Resolved by omp's loader to the running host, so this is the installed omp version, not a bundled copy.
 import { VERSION } from "@oh-my-pi/pi-utils";
@@ -98,6 +98,15 @@ const readGlobalState = (): GlobalState => {
 		return { enabled: true, hiddenProjects: [] };
 	}
 };
+
+/** "plan mode + goal mode (paused)"; the goal objective and plan path stay private. */
+const formatModes = (state: SessionModeState | undefined): string =>
+	state
+		? (["plan", "goal", "loop", "vibe"] as const)
+				.filter((mode) => state[mode].status !== "inactive")
+				.map((mode) => `${mode} mode${state[mode].status === "paused" ? " (paused)" : ""}`)
+				.join(" + ")
+		: "";
 
 const writeGlobalState = (patch: Partial<GlobalState>): GlobalState => {
 	const next = { ...readGlobalState(), ...patch };
@@ -204,6 +213,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let lastFlushAt = 0;
 	const runningTools = new Map<string, string>(); // toolCallId -> toolName
 	let agentRunning = false;
+	let modes = ""; // formatted active omp modes, see formatModes
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
 	let { enabled, hiddenProjects } = readGlobalState();
@@ -252,7 +262,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const largeImageKey = LARGE_IMAGE_KEY ?? appIconUrl;
 
 		return {
-			details: truncateDiscordText(`omp v${VERSION} · ${project}`),
+			details: truncateDiscordText(`omp v${VERSION} · ${project}${modes ? ` · ${modes}` : ""}`),
 			state: truncateDiscordText(state),
 			startTimestamp: new Date(presence.startedAt),
 			largeImageKey,
@@ -437,6 +447,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			appIconUrl = url;
 			schedulePresenceUpdate();
 		});
+		modes = formatModes(ctx.sessionModes?.getState()); // TUI only; mode_changed covers the rest
 		repoUrl = undefined;
 		void findPublicGithubRepo(ctx.cwd).then((url) => {
 			repoUrl = url;
@@ -498,6 +509,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 			status: "idle",
 			detail: undefined,
 		});
+	});
+
+	pi.on("mode_changed", async (event) => {
+		modes = formatModes(event.state);
+		schedulePresenceUpdate();
 	});
 
 	pi.on("session_shutdown", async () => {
