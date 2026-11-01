@@ -36,14 +36,23 @@ const BRAND_ICONS: [RegExp, string][] = [
 const GLOBAL_STATE_FILE = join(homedir(), ".omp", "agent", "discord-presence-state.json");
 const RECONNECT_DELAY_MS = 15_000;
 const PRESENCE_UPDATE_DEBOUNCE_MS = 750;
+// Discord accepts at most 5 activity updates per 20 s; more are acknowledged but may never render,
+// which can leave a stale "using tool" on screen. Space updates out and always send the latest state.
+const MIN_PRESENCE_UPDATE_INTERVAL_MS = 4_000;
 const DISCORD_TEXT_LIMIT = 128;
 const PRIVATE_PROJECT_LABEL = "private project";
 
 type PresenceStatus = "idle" | "working" | "tool" | "offline";
 
+const STATUS_LABELS: Record<PresenceStatus, string> = {
+	idle: "idle",
+	working: "thinking",
+	tool: "using tool",
+	offline: "starting",
+};
+
 type PresenceState = {
 	status: PresenceStatus;
-	state: string;
 	toolName?: string;
 	model?: { provider: string; id: string };
 	startedAt: number;
@@ -189,6 +198,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let repoUrl: string | undefined;
 	let wslBridge: Server | undefined;
 	let updateTimer: NodeJS.Timeout | undefined;
+	let lastFlushAt = 0;
+	const runningTools = new Map<string, string>(); // toolCallId -> toolName
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
 	let { enabled, hiddenProjects } = readGlobalState();
@@ -196,7 +207,6 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	let presence: PresenceState = {
 		status: "offline",
-		state: "starting discord rich presence",
 		startedAt: Date.now(),
 	};
 
@@ -221,13 +231,14 @@ export default function discordPresence(pi: ExtensionAPI) {
 	};
 
 	const buildActivity = (): DiscordRPC.Presence => {
-		const model = presence.model && `${presence.model.provider}/${presence.model.id}`;
+		const { provider: rawProvider = "", id: rawId = "" } = presence.model ?? {};
+		// Gateway providers already prefix the id ("amanai" + "amanai/claude-haiku-4.5"); don't repeat it.
+		const model = presence.model && (rawId.startsWith(`${rawProvider}/`) ? rawId : `${rawProvider}/${rawId}`);
 		const effort = pi.getThinkingLevel();
 		const modelInfo = model && (effort && effort !== "inherit" ? `${model} · effort: ${effort}` : model);
 		const modelSuffix = modelInfo ? ` · ${modelInfo}` : "";
-		const state = presence.toolName
-			? `${presence.state} · ${presence.toolName}${modelSuffix}`
-			: `${presence.state}${modelSuffix}`;
+		const label = STATUS_LABELS[presence.status];
+		const state = presence.toolName ? `${label} · ${presence.toolName}${modelSuffix}` : `${label}${modelSuffix}`;
 		const id = presence.model?.id.toLowerCase() ?? "";
 		const provider = presence.model?.provider.toLowerCase() ?? "";
 		const brand =
@@ -255,6 +266,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		if (!connected || !rpc || !enabled || shuttingDown) return;
 
 		try {
+			lastFlushAt = Date.now();
 			await rpc.setActivity(buildActivity());
 		} catch {
 			connected = false;
@@ -264,7 +276,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	const schedulePresenceUpdate = () => {
 		if (updateTimer) return;
-		updateTimer = setTimeout(() => void flushPresence(), PRESENCE_UPDATE_DEBOUNCE_MS);
+		const delay = Math.max(PRESENCE_UPDATE_DEBOUNCE_MS, lastFlushAt + MIN_PRESENCE_UPDATE_INTERVAL_MS - Date.now());
+		updateTimer = setTimeout(() => void flushPresence(), delay);
 	};
 
 	const updatePresence = (patch: Partial<PresenceState>) => {
@@ -341,7 +354,6 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 		updatePresence({
 			status: "idle",
-			state: "idle",
 			toolName: undefined,
 			startedAt: Date.now(),
 		});
@@ -413,7 +425,6 @@ export default function discordPresence(pi: ExtensionAPI) {
 		({ enabled, hiddenProjects } = readGlobalState());
 		updatePresence({
 			status: "idle",
-			state: "idle",
 			model: ctx.model,
 			startedAt: Date.now(),
 		});
@@ -431,35 +442,31 @@ export default function discordPresence(pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {
+		runningTools.clear();
 		updatePresence({
 			status: "working",
-			state: "thinking",
 			toolName: undefined,
 			model: ctx.model,
 			startedAt: Date.now(),
 		});
 	});
 
+	// Tools can run in parallel: stay on "using tool" until the last one finishes.
 	pi.on("tool_execution_start", async (event) => {
-		updatePresence({
-			status: "tool",
-			state: "using tool",
-			toolName: event.toolName,
-		});
+		runningTools.set(event.toolCallId, event.toolName);
+		updatePresence({ status: "tool", toolName: event.toolName });
 	});
 
-	pi.on("tool_execution_end", async () => {
-		updatePresence({
-			status: "working",
-			state: "thinking",
-			toolName: undefined,
-		});
+	pi.on("tool_execution_end", async (event) => {
+		runningTools.delete(event.toolCallId);
+		const stillRunning = [...runningTools.values()].at(-1);
+		updatePresence(stillRunning ? { status: "tool", toolName: stillRunning } : { status: "working", toolName: undefined });
 	});
 
 	pi.on("agent_end", async () => {
+		runningTools.clear();
 		updatePresence({
 			status: "idle",
-			state: "idle",
 			toolName: undefined,
 		});
 	});

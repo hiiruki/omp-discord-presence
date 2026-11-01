@@ -11,7 +11,7 @@ using tool · bash · anthropic/claude-opus-4 · effort: high
 [ View on GitHub ]
 ```
 
-The effort is read whenever the status updates, so a change appears with the next prompt.
+Status changes reach Discord within about 4 seconds. Updates are spaced out because Discord accepts only 5 activity updates per 20 seconds, and the latest state is always sent last. While tools run in parallel, the status stays on "using tool" until the last one finishes. The effort is read whenever the status updates, so a change appears with the next prompt.
 
 ### GitHub button
 
