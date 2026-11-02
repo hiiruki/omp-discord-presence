@@ -198,7 +198,7 @@ flowchart TD
     S -- "file watcher<br/>(all sessions)" --> EF --> P
     P --> T --> RC -- "yes" --> B
     V & M & L & G & BR & A & OS --> B
-    B -- "SET_ACTIVITY<br/>details · state · logo · button · party" --> RPC["discord-rpc client"]
+    B -- "SET_ACTIVITY<br/>details · state · logo · button · party" --> RPC["IPC client"]
     RPC --> D["Discord desktop app"]
     E5 -- "clear activity, close bridge" --> RPC
 ```
@@ -230,7 +230,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     C["connect()"] --> Q{"does $XDG_RUNTIME_DIR/discord-ipc-0<br/>answer?"}
-    Q -- "yes: Linux Discord, socat,<br/>or another omp session" --> R["discord-rpc login"]
+    Q -- "yes: Linux Discord, socat,<br/>or another omp session" --> R["IPC handshake"]
     Q -- "no" --> W{"running in WSL?"}
     W -- "no: Windows / macOS / Linux" --> R
     W -- "yes" --> BR["remove stale socket,<br/>serve discord-ipc-0"]

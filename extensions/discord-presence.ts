@@ -1,5 +1,4 @@
 import type { ExtensionAPI, ExtensionContext, SessionModeState } from "@oh-my-pi/pi-coding-agent";
-import DiscordRPC from "discord-rpc";
 // Resolved by omp's loader to the running host, so these are the installed omp's version and active profile dir.
 import { getAgentDir, VERSION } from "@oh-my-pi/pi-utils";
 import { execFile, spawn } from "node:child_process";
@@ -18,6 +17,7 @@ import { createConnection, createServer, type Server } from "node:net";
 import { release } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { connectDiscordIpc, discordIpcPath, type Activity, type DiscordIpcClient } from "./discord-ipc.ts";
 import { MODEL_ICON_RULES, PROVIDER_ICON_RULES, type IconRule } from "./model-icons.generated.ts";
 import { promisify } from "node:util";
 
@@ -106,19 +106,6 @@ const DEFAULT_STATE: GlobalState = {
 	autoHidePrivate: true,
 	showBranch: false,
 	projects: {},
-};
-
-type DiscordRpcClient = DiscordRPC.Client & {
-	clearActivity?: () => Promise<void> | void;
-	destroy?: () => Promise<void>;
-};
-
-/**
- * Closes a discord-rpc client without waiting. destroy() resolves only once Discord closes the pipe, and rejects
- * when the socket never opened; unhandled, that rejection would crash the whole omp process.
- */
-const closeClient = (client: DiscordRpcClient | undefined) => {
-	client?.destroy?.().catch(() => {});
 };
 
 const truncateDiscordText = (value: string): string => {
@@ -407,11 +394,10 @@ const formatDuration = (ms: number): string => {
 	return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 };
 
-// WSL: Discord runs on Windows and only exposes a named pipe, so serve the Unix socket discord-rpc looks for
-// and relay each connection through the bundled npiperelay.exe. Path logic mirrors discord-rpc's ipc transport.
+// WSL: Discord runs on Windows and only exposes a named pipe, so serve the Unix socket the IPC client looks for
+// and relay each connection through the bundled npiperelay.exe.
 const IS_WSL = process.platform === "linux" && (!!process.env.WSL_DISTRO_NAME || /microsoft/i.test(release()));
-const { XDG_RUNTIME_DIR, TMPDIR, TMP, TEMP } = process.env;
-const IPC_SOCKET_PATH = join(XDG_RUNTIME_DIR || TMPDIR || TMP || TEMP || "/tmp", "discord-ipc-0");
+const IPC_SOCKET_PATH = discordIpcPath(0);
 const NPIPERELAY_PATH = fileURLToPath(new URL("../bin/npiperelay.exe", import.meta.url));
 // shortcut: only Discord's first pipe (stable client); add -1..-9 fallbacks if PTB/Canary users need it.
 const WINDOWS_DISCORD_PIPE = "//./pipe/discord-ipc-0";
@@ -506,7 +492,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		changeRunningSubagents(running ? 1 : -1);
 	};
 	const onSubagentsChanged = () => schedulePresenceUpdate();
-	let rpc: DiscordRpcClient | undefined;
+	let rpc: DiscordIpcClient | undefined;
 	let connected = false;
 	let reconnectTimer: NodeJS.Timeout | undefined;
 	let app: AppInfo = {};
@@ -514,7 +500,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	// Flushes wait for the repo check, so a private repo's name is never sent before it is known to be private.
 	let repoCheck: Promise<unknown> = Promise.resolve();
 	let repoLookupId = 0;
-	let lastActivity: DiscordRPC.Presence | undefined;
+	let lastActivity: Activity | undefined;
 	let idleSince: number | undefined;
 	let wslBridge: Server | undefined;
 	let updateTimer: NodeJS.Timeout | undefined;
@@ -598,7 +584,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		}, RECONNECT_DELAY_MS);
 	};
 
-	const buildActivity = (): DiscordRPC.Presence => {
+	const buildActivity = (): Activity => {
 		const { provider: rawProvider = "", id: rawId = "" } = presence.model ?? {};
 		// Gateway providers already prefix the id ("amanai" + "amanai/claude-haiku-4.5"); don't repeat it.
 		const model = presence.model && (rawId.startsWith(`${rawProvider}/`) ? rawId : `${rawProvider}/${rawId}`);
@@ -616,24 +602,29 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const project = hidden ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
 		// A branch name can reveal what a hidden project is, so it goes with the project name.
 		const branchSuffix = showBranch && branch && !hidden ? ` @ ${branch}` : "";
-		const largeImageKey = LARGE_IMAGE_KEY ?? app.iconUrl;
+		const largeImage = LARGE_IMAGE_KEY ?? app.iconUrl;
+		// The logo names the model's maker, so it follows the model setting.
+		const smallImage = showModel ? iconKey : undefined;
 
 		return {
 			details: truncateDiscordText(`omp v${VERSION} · ${project}${branchSuffix}${modes ? ` · ${modes}` : ""}`),
 			state: truncateDiscordText(state),
 			// Per prompt: presence.startedAt resets on every agent_start. Per session: fixed at session_start.
-			startTimestamp: new Date(timer === "session" ? sessionStartedAt : presence.startedAt),
-			largeImageKey,
-			largeImageText: largeImageKey
-				? `oh-my-pi v${VERSION} · ${openSessions} session${openSessions === 1 ? "" : "s"} open`
-				: undefined,
-			// The logo names the model's maker, so it follows the model setting.
-			smallImageKey: showModel ? iconKey : undefined,
-			smallImageText: showModel && iconKey ? modelInfo : undefined,
+			timestamps: { start: timer === "session" ? sessionStartedAt : presence.startedAt },
+			...((largeImage || smallImage) && {
+				assets: {
+					large_image: largeImage,
+					large_text: largeImage
+						? `oh-my-pi v${VERSION} · ${openSessions} session${openSessions === 1 ? "" : "s"} open`
+						: undefined,
+					small_image: smallImage,
+					small_text: smallImage ? modelInfo : undefined,
+				},
+			}),
 			// Discord never shows your own buttons to you; other people see them on your profile.
 			buttons: showButton && "url" in repo && !hidden ? [{ label: "View on GitHub", url: repo.url }] : undefined,
 			// Discord appends "(size of max)" to the state line. The party counts agents: the main one plus subagents.
-			...(runningSubagents > 0 && { partySize: runningSubagents + 1, partyMax: batchSubagents + 1 }),
+			...(runningSubagents > 0 && { party: { size: [runningSubagents + 1, batchSubagents + 1] } }),
 			instance: false,
 		};
 	};
@@ -649,6 +640,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 			await rpc.setActivity(activity);
 			lastActivity = activity;
 		} catch {
+			// Discord stopped answering: drop this connection rather than leave its socket open next to the new one.
+			rpc?.close();
+			rpc = undefined;
 			connected = false;
 			scheduleReconnect();
 		}
@@ -686,26 +680,19 @@ export default function discordPresence(pi: ExtensionAPI) {
 		try {
 			// Re-checked on every attempt: if the session that owned the bridge exits, this one takes over.
 			wslBridge ??= await startWslBridge();
-			rpc = new DiscordRPC.Client({ transport: "ipc" }) as DiscordRpcClient;
-			rpc.on("ready", () => {
-				connected = true;
-				void flushPresence();
-			});
-			rpc.on("disconnected", () => {
+			const client = await connectDiscordIpc(CLIENT_ID, () => {
+				if (rpc !== client) return; // a connection already replaced
 				connected = false;
+				rpc = undefined;
 				scheduleReconnect();
 			});
-			rpc.on("error", () => {
-				connected = false;
-				scheduleReconnect();
-			});
-
-			await rpc.login({ clientId: CLIENT_ID });
+			// Turned off or shut down while the handshake was in flight.
+			if (shuttingDown || !enabled) return client.close();
+			rpc = client;
+			connected = true;
+			void flushPresence();
 		} catch {
 			connected = false;
-			// A timed-out login leaves its socket (and on WSL a relay process) open; close it before retrying.
-			closeClient(rpc);
-			rpc = undefined;
 			scheduleReconnect();
 		}
 	}
@@ -716,13 +703,12 @@ export default function discordPresence(pi: ExtensionAPI) {
 		connected = false;
 
 		try {
-			await rpc?.clearActivity?.();
+			await rpc?.setActivity(undefined);
 		} catch {
 			// Discord may already be closed; ignore cleanup errors.
 		}
 
-		closeClient(rpc);
-
+		rpc?.close();
 		rpc = undefined;
 	};
 
@@ -801,7 +787,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 				: "WSL, shared socket from another omp session or a relay";
 		if (!app.name) app = await fetchAppInfo(); // the startup fetch may have failed (offline, rate limit)
 		const activity = lastActivity ?? buildActivity();
-		const iconKey = activity.smallImageKey;
+		const iconKey = activity.assets?.small_image;
 		const uploaded = iconKey ? await fetchUploadedAssets() : undefined;
 		const logo = !showModel
 			? "hidden (model hidden in settings)"
@@ -831,7 +817,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			"",
 			lastActivity ? "Sent to Discord:" : "Would send (not connected yet):",
 			`  ${activity.details}`,
-			`  ${activity.state}${activity.partySize ? ` (${activity.partySize} of ${activity.partyMax} agents)` : ""}`,
+			`  ${activity.state}${activity.party ? ` (${activity.party.size[0]} of ${activity.party.size[1]} agents)` : ""}`,
 			`  logo: ${logo}`,
 			`  button: ${button}`,
 			lastActivity ? `  last update ${formatDuration(Date.now() - lastFlushAt)} ago` : "",

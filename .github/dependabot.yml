@@ -28,6 +28,3 @@ updates:
         dependency-type: development
         exclude-patterns: ["@oh-my-pi/*"]
         update-types: [minor, patch]
-      runtime:
-        dependency-type: production
-        update-types: [minor, patch]

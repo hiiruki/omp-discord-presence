@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- **No dependencies:** the plugin now talks to the Discord app itself instead of through `discord-rpc`, so installing it no longer pulls in 6 extra packages (about 0.7 MB: `discord-rpc`, `node-fetch`, `ws` and their dependencies).
+
+### Fixed
+
+- When the Discord app stopped responding, an update, or the clear when a session ends, could wait forever. They now give up after 5 seconds, and the plugin reconnects.
+
 ## [0.4.2] - 2026-11-02
 
 ### Changed

@@ -2,8 +2,5 @@
 allowBuilds:
   onnxruntime-node: false
   protobufjs: false
-# register-scheme is a git-hosted optional dep of discord-rpc, only used for Windows protocol registration (not needed for IPC).
-ignoredOptionalDependencies:
-  - register-scheme
 minimumReleaseAgeExclude:
   - '@oh-my-pi/*'

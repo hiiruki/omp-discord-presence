@@ -11,7 +11,6 @@
     "oh-my-pi",
     "omp-plugin",
     "discord",
-    "discord-rpc",
     "rich-presence",
     "discord-presence",
     "coding-agent",
@@ -37,15 +36,11 @@
     "test": "bun test",
     "sync-icons": "bun scripts/sync-model-icons.ts"
   },
-  "dependencies": {
-    "discord-rpc": "^4.0.1"
-  },
   "devDependencies": {
     "@oh-my-pi/pi-catalog": "^18.14.2",
     "@oh-my-pi/pi-coding-agent": "^18.14.2",
     "@oh-my-pi/pi-utils": "^18.14.2",
     "@types/bun": "^1.4.4",
-    "@types/discord-rpc": "^4.0.11",
     "@types/node": "^26.6.6",
     "oxlint": "^1.90.0",
     "typescript": "^7.0.2"

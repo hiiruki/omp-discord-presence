@@ -8,7 +8,8 @@ An omp (oh-my-pi) extension that shows the omp session as Discord Rich Presence.
 
 | Path | What | Edit by hand? |
 | --- | --- | --- |
-| `extensions/discord-presence.ts` | the whole extension (default export = omp factory; named exports are test seams) | yes |
+| `extensions/discord-presence.ts` | the extension (default export = omp factory; named exports are test seams) | yes |
+| `extensions/discord-ipc.ts` | minimal client for Discord's local IPC protocol (handshake, `SET_ACTIVITY`) | yes |
 | `extensions/model-icons.generated.ts` | lobe-icons model/provider logo rules | no, `pnpm sync-icons` |
 | `assets/models/*.png` | logos, uploaded as Discord Art Assets; repo only, not in the npm package (the README links them on GitHub) | no, `pnpm sync-icons` |
 | `scripts/sync-model-icons.ts` | regenerates the two above and the README logo tables | yes |
@@ -56,6 +57,7 @@ pnpm sync-icons                            # after bumping lobe-icons or @oh-my-
 - **Where:**
   - `test/helpers.test.ts`: pure functions;
   - `test/icons.test.ts`: the generated logo data;
+  - `test/ipc.test.ts`: the IPC client against a misbehaving Discord (split frames, pings, refusals, drops);
   - `test/presence.test.ts`: end-to-end against the fake Discord in `test/support.ts`.
 - **Isolation:** tests run in a throwaway agent dir (`PI_CODING_AGENT_DIR`) and Discord socket (`XDG_RUNTIME_DIR`), set up by `test/preload.ts`. Bun's `os.homedir()` ignores a changed `HOME`, so never rely on `HOME` for isolation. The same applies to manual experiments: point `PI_CODING_AGENT_DIR` at a temp dir, and never write to the maintainer's real `~/.omp/agent/discord-presence-state.json`.
 - **No network:** the network is stubbed. Add new endpoints to `stubNetwork` instead of reaching the internet.
@@ -127,9 +129,9 @@ Rules:
 
 ## Dependencies
 
-- **Dependabot** opens PRs weekly: grouped minor/patch for dev tooling and for runtime, `@oh-my-pi/*` in lockstep, and majors one per package.
+- **Dependabot** opens PRs weekly: grouped minor/patch for dev tooling, `@oh-my-pi/*` in lockstep, and majors one per package.
 - **Merging:** merge once CI is green. If a major breaks the checks, fix the code in a `chore(deps)` commit on `main`. Dependabot then closes its PR as superseded.
-- **`discord-rpc`** is the only runtime dependency. Keep it that way. Don't add a dependency for a few lines of code.
+- **No runtime dependencies.** Keep it that way: the Discord IPC client is our own (`extensions/discord-ipc.ts`). Don't add a dependency for a few lines of code.
 
 ## Discord application
 
