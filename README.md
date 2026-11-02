@@ -21,7 +21,12 @@ After 15 minutes without a prompt (configurable in `/discord-presence settings`,
 
 Context-window usage can be shown at the end of the status (`… · effort: high · context 42%`). It is **off by default**. Turn it on in `/discord-presence settings` or with `/discord-presence context on`. The value updates after every turn.
 
-While subagents (task tool, eval agents) are working, the status shows how many are running, e.g. `using tool · wait · 2 subagents · …`. Nested subagents are included. The count drops as each one finishes.
+While subagents (task tool, eval agents) are working, Discord shows them as a **party** after the status line, e.g. `using tool · wait · … (3 of 4)`. The party counts agents, the main one included:
+
+- **First number:** agents still working. **Second number:** all agents in the current batch.
+- **Example:** a task with 3 subagents starts at `(4 of 4)`, then drops to `(3 of 4)` and `(2 of 4)` as they finish, and disappears when the last one is done.
+- **Nested subagents** are included.
+- **The next batch** starts a new count.
 
 When omp is blocked on you, the status says so instead of `thinking`:
 
@@ -80,7 +85,7 @@ npm publish
 
 The package ships only `extensions/`, `bin/` and `assets/`, about 1.9 MB. `@oh-my-pi/pi-coding-agent` is an optional peer, so installing the plugin doesn't pull a second copy of omp.
 
-Only the main session talks to Discord; subagent sessions (task tool, eval agents) never connect and only report how many of them are running.
+Only the main session talks to Discord; subagent sessions (task tool, eval agents) never connect and only report how many of them are running (shown as the Discord party).
 
 ## Platform support
 
@@ -141,7 +146,7 @@ flowchart TD
     E5 -- "clear activity, close bridge" --> RPC
 ```
 
-Subagent sessions (task tool, eval agents) also load the plugin, but they never connect, so they can't overwrite or clear the main session's status. They run in the same process and share the plugin module. Each one bumps a shared counter while its agent loop runs, and the main session shows that count.
+Subagent sessions (task tool, eval agents) also load the plugin, but they never connect, so they can't overwrite or clear the main session's status. They run in the same process and share the plugin module. Each one bumps a shared counter while its agent loop runs, and the main session shows that count as the Discord party size.
 
 ### Connecting to Discord
 

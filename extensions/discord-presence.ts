@@ -330,9 +330,13 @@ const SHOW_PRIVATE_HINT =
 // Subagent sessions run in this process with rebound copies of this factory, so they share this module.
 // Each one reports while its agent loop runs (nested subagents included); the main session displays the total.
 let runningSubagents = 0;
+// Subagents started since the count was last zero: the party's max, so "(2 of 4)" reads as 2 still working of 4.
+let batchSubagents = 0;
 const subagentListeners = new Set<() => void>();
 const changeRunningSubagents = (delta: 1 | -1) => {
 	runningSubagents = Math.max(0, runningSubagents + delta);
+	if (delta === 1) batchSubagents++;
+	if (runningSubagents === 0) batchSubagents = 0;
 	for (const listener of subagentListeners) listener();
 };
 
@@ -421,10 +425,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const modelSuffix = modelInfo ? ` · ${modelInfo}` : "";
 		const contextSuffix = showContext && presence.contextPercent !== undefined ? ` · context ${presence.contextPercent}%` : "";
 		const label = STATUS_LABELS[presence.status];
-		const subagents = runningSubagents ? ` · ${runningSubagents} subagent${runningSubagents === 1 ? "" : "s"}` : "";
 		// "waiting for approval · bash" reads as one phrase; other details are separate segments.
 		const head = presence.detail ? `${label}${presence.status === "waiting" ? " " : " · "}${presence.detail}` : label;
-		const state = `${head}${subagents}${modelSuffix}${contextSuffix}`;
+		const state = `${head}${modelSuffix}${contextSuffix}`;
 		const iconKey = presence.model && modelIconKey(presence.model);
 		const hidden = projectHidden();
 		const project = hidden ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
@@ -443,6 +446,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 			smallImageText: showModel && iconKey ? modelInfo : undefined,
 			// Discord never shows your own buttons to you; other people see them on your profile.
 			buttons: showButton && "url" in repo && !hidden ? [{ label: "View on GitHub", url: repo.url }] : undefined,
+			// Discord appends "(size of max)" to the state line. The party counts agents: the main one plus subagents.
+			...(runningSubagents > 0 && { partySize: runningSubagents + 1, partyMax: batchSubagents + 1 }),
 			instance: false,
 		};
 	};
@@ -629,7 +634,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			"",
 			lastActivity ? "Sent to Discord:" : "Would send (not connected yet):",
 			`  ${activity.details}`,
-			`  ${activity.state}`,
+			`  ${activity.state}${activity.partySize ? ` (${activity.partySize} of ${activity.partyMax} agents)` : ""}`,
 			`  logo: ${logo}`,
 			`  button: ${button}`,
 			lastActivity ? `  last update ${formatDuration(Date.now() - lastFlushAt)} ago` : "",
