@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-02
+
 ### Changed
 
 - **Instant branch updates:** with Git branch on, a branch switch shows up right away instead of within 15 seconds, and the plugin no longer runs git every 15 seconds to check.
@@ -81,7 +83,8 @@ First release on npm, ported from the pi `pi-discord-presence` extension to omp 
 - **`/discord-presence status`:** what Discord receives, the connection path, and why a logo or button is missing.
 - **WSL:** a bundled `npiperelay.exe` bridge, so no `socat` relay is needed. Sessions share one bridge, and another session takes it over when its owner exits.
 
-[Unreleased]: https://github.com/hiiruki/omp-discord-presence/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/hiiruki/omp-discord-presence/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/hiiruki/omp-discord-presence/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/hiiruki/omp-discord-presence/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/hiiruki/omp-discord-presence/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hiiruki/omp-discord-presence/compare/v0.2.0...v0.3.0
