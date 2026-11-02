@@ -323,7 +323,19 @@ const startWslBridge = async (): Promise<Server | undefined> => {
 	return promise;
 };
 
-const USAGE = "usage: /discord-presence [settings|status|on|off|refresh|hide|show|context on|context off]";
+// Subcommands offered by Tab completion; the aliases (private, public) still work but aren't listed.
+const SUBCOMMANDS: [value: string, description: string][] = [
+	["settings", "Open the settings menu"],
+	["status", "What Discord receives, and why parts may be missing"],
+	["hide", "Show \"private project\" instead of this project's name"],
+	["show", "Show this project's name again"],
+	["on", "Turn the presence on in every session"],
+	["off", "Turn the presence off in every session"],
+	["refresh", "Send the current status to Discord now"],
+	["context on", "Show context-window usage"],
+	["context off", "Hide context-window usage"],
+];
+const USAGE = `usage: /discord-presence [${SUBCOMMANDS.map(([value]) => value).join("|")}]`;
 const SHOW_PRIVATE_HINT =
 	"this project is hidden because its GitHub repo is private (or its visibility can't be checked); turn off \"Auto-hide private repos\" in /discord-presence settings to show it.";
 
@@ -785,6 +797,16 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	pi.registerCommand("discord-presence", {
 		description: `toggle Discord Rich Presence for all omp sessions, or hide/show this project's name. ${USAGE}`,
+		// omp replaces the whole argument text with the chosen value, so "context o" completes to "context on".
+		getArgumentCompletions: (argumentPrefix) => {
+			const typed = argumentPrefix.trimStart().toLowerCase();
+			const items = SUBCOMMANDS.filter(([value]) => value.startsWith(typed)).map(([value, description]) => ({
+				value,
+				label: value,
+				description,
+			}));
+			return items.length > 0 ? items : null;
+		},
 		handler: async (args, ctx) => {
 			cwd = ctx.cwd;
 			await applyGlobalState(readGlobalState());

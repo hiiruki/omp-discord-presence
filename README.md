@@ -1,6 +1,8 @@
 # omp-discord-presence
 
-Discord Rich Presence extension for omp (oh-my-pi) coding agent.
+[![npm](https://img.shields.io/npm/v/omp-discord-presence)](https://www.npmjs.com/package/omp-discord-presence) [![license](https://img.shields.io/npm/l/omp-discord-presence)](LICENSE)
+
+Discord Rich Presence extension for omp (oh-my-pi) coding agent. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 Discord shows the installed omp version, the project name, any active omp mode (plan, goal, loop, vibe), the current state (idle / thinking / using tool), the active tool, the model and its effort (thinking level), with the model maker's logo as a small badge:
 
@@ -25,6 +27,7 @@ using tool · bash · anthropic/claude-opus-4 · effort: high
   - the model, button and branch can each be turned off;
   - goal objectives, plan paths, approval reasons and retry errors are never sent.
 - **Settings menu** in the omp TUI (`/discord-presence settings`), with **per-project overrides**. Every change applies live to all running sessions.
+- **Tab completion** for every `/discord-presence` subcommand.
 - **Status report** (`/discord-presence status`): exactly what Discord receives, and why a logo or button is missing.
 - **Works everywhere:** Windows, macOS, Linux and WSL. On WSL, a bundled bridge means no `socat` relay is needed.
 
@@ -291,6 +294,8 @@ Inside omp:
 /discord-presence context on|off   # show context-window usage (off by default)
 ```
 
+Press Tab after `/discord-presence ` to pick a subcommand from a list with short descriptions. Partial input narrows it, e.g. `context o` offers `context on` and `context off`.
+
 ### Settings menu
 
 `/discord-presence settings` opens a menu in the omp TUI. Press Enter on a row to change it; the menu stays open, so several settings can be changed in a row. Esc or **Done** closes it.
@@ -408,17 +413,19 @@ All settings, per-project overrides and the hidden project list are shared by ev
 
 ## Publishing a release (maintainer)
 
-1. Bump `version` in `package.json`: patch for fixes, minor for features. npm rejects republishing a version.
-2. Commit, then publish:
+1. Add the changes under `## [Unreleased]` in `CHANGELOG.md`, then rename that heading to the new version and date and update the compare links at the bottom.
+2. Bump `version` in `package.json`: patch for fixes, minor for features (while below 1.0). npm rejects republishing a version.
+3. Commit as `chore(release): x.y.z`, tag `vx.y.z`, push with tags, then publish:
 
    ```bash
    npm login      # once
+   git push origin main --tags
    npm publish
    ```
 
-3. Users pick it up with `omp plugin upgrade omp-discord-presence`.
+4. Users pick it up with `omp plugin upgrade omp-discord-presence`.
 
-The package ships only `extensions/`, `bin/` and `assets/`, about 1.9 MB. `@oh-my-pi/pi-coding-agent` and `@oh-my-pi/pi-utils` are optional peers resolved from the running omp, so installing the plugin doesn't pull a second copy of omp.
+The package ships only `extensions/`, `bin/`, `assets/` and `CHANGELOG.md` (plus `README.md`, `LICENSE` and `package.json`, which npm always includes), about 1.9 MB. `@oh-my-pi/pi-coding-agent` and `@oh-my-pi/pi-utils` are optional peers resolved from the running omp, so installing the plugin doesn't pull a second copy of omp.
 
 Changes to the Discord application (name, icon, Art Assets) reach every user immediately, with no release. New logo rules in `extensions/model-icons.generated.ts` still need a release.
 
