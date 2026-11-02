@@ -267,14 +267,20 @@ const GITHUB_REMOTE = /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/;
 type RepoLookup = { url: string; slug: string } | { reason: string; mayBePrivate?: true };
 
 const LOOKUP_TIMEOUT_MS = 5_000;
-const BRANCH_POLL_MS = 15_000;
 
-/** The checked-out branch, or the short commit on a detached HEAD; undefined outside a git repo. */
-const readGitBranch = async (cwd: string): Promise<string | undefined> => {
-	const git = (...args: string[]) =>
-		execFileAsync("git", ["-C", cwd, ...args], { timeout: LOOKUP_TIMEOUT_MS }).then(({ stdout }) => stdout.trim());
+/** The repository's git directory (worktree-aware); one git call per session instead of one per branch check. */
+const resolveGitDir = (cwd: string): Promise<string | undefined> =>
+	execFileAsync("git", ["-C", cwd, "rev-parse", "--absolute-git-dir"], { timeout: LOOKUP_TIMEOUT_MS })
+		.then(({ stdout }) => stdout.trim() || undefined)
+		.catch(() => undefined);
+
+/** The checked-out branch read from HEAD, or the short commit on a detached HEAD; no git process. */
+const readHeadBranch = (gitDir: string): string | undefined => {
 	try {
-		return (await git("branch", "--show-current")) || (await git("rev-parse", "--short", "HEAD")) || undefined;
+		const head = readFileSync(join(gitDir, "HEAD"), "utf8").trim();
+		const ref = /^ref: refs\/heads\/(.+)$/.exec(head);
+		if (ref) return ref[1];
+		return /^[0-9a-f]{40,64}$/.test(head) ? head.slice(0, 7) : undefined;
 	} catch {
 		return undefined;
 	}
@@ -509,6 +515,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let { showContext, showModel, showButton, showBranch } = effectiveSettings(initial, process.cwd());
 	let projectOverrides: ProjectOverrides = {};
 	let branch: string | undefined;
+	let gitDir: string | undefined; // resolved once per session, only while the branch is shown
+	let headWatcher: FSWatcher | undefined;
 	let cwd = process.cwd();
 
 	let presence: PresenceState = {
@@ -519,11 +527,35 @@ export default function discordPresence(pi: ExtensionAPI) {
 	const autoHidden = () => autoHidePrivate && "mayBePrivate" in repo && repo.mayBePrivate === true;
 	const projectHidden = () => isProjectHidden(cwd, hiddenProjects) || autoHidden();
 
-	const refreshBranch = async () => {
-		const next = await readGitBranch(cwd);
+	const refreshBranch = () => {
+		const next = gitDir ? readHeadBranch(gitDir) : undefined;
 		if (next === branch) return;
 		branch = next;
 		if (showBranch) schedulePresenceUpdate();
+	};
+
+	/**
+	 * Follows HEAD while the branch is shown: git switches branch by renaming HEAD.lock over HEAD, so watch the git
+	 * directory and re-read HEAD (a small file) on its events; no git process per check.
+	 */
+	const startBranchWatch = async () => {
+		if (headWatcher || !showBranch) return;
+		gitDir ??= await resolveGitDir(cwd);
+		refreshBranch();
+		if (!gitDir || headWatcher || !showBranch || shuttingDown) return;
+		try {
+			headWatcher = watch(gitDir, { persistent: false }, (_event, filename) => {
+				if (!filename || filename === "HEAD") refreshBranch();
+			});
+			headWatcher.on("error", () => {}); // e.g. the repo was deleted; turn_end still re-reads HEAD
+		} catch {
+			// Unwatchable (some network filesystems): turn_end still re-reads HEAD.
+		}
+	};
+
+	const stopBranchWatch = () => {
+		headWatcher?.close();
+		headWatcher = undefined;
 	};
 
 	const clearReconnectTimer = () => {
@@ -685,8 +717,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 			autoHidePrivate !== next.autoHidePrivate ||
 			showBranch !== effective.showBranch ||
 			timer !== next.timer;
-		if (effective.showBranch && !showBranch) branch = await readGitBranch(cwd); // read before the flush below
+		const branchTurnedOn = effective.showBranch && !showBranch;
 		({ showContext, showModel, showButton, showBranch } = effective);
+		if (branchTurnedOn) await startBranchWatch(); // read the branch before the flush below
+		else if (!showBranch) stopBranchWatch();
 		autoHidePrivate = next.autoHidePrivate;
 		timer = next.timer;
 		if (awayMinutes !== next.awayMinutes) {
@@ -1004,6 +1038,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 		}
 		subagentListeners.add(onSubagentsChanged);
 		shuttingDown = false;
+		if (cwd !== ctx.cwd) {
+			// A session switch can move to another repository: forget the previous git dir and its watcher.
+			stopBranchWatch();
+			gitDir = undefined;
+		}
 		cwd = ctx.cwd;
 		watchGlobalState();
 		const state = readGlobalState();
@@ -1051,12 +1090,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 					})
 					.catch(() => {});
 			}),
-			refreshBranch(),
+			startBranchWatch(),
 		]).then(schedulePresenceUpdate);
-		// The agent (or you, in another terminal) may switch branches; only poll git while the branch is shown.
-		ctx.setInterval(() => {
-			if (showBranch) void refreshBranch();
-		}, BRANCH_POLL_MS);
 		if (enabled) void connect();
 	});
 
@@ -1129,7 +1164,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	// Context grows every turn; no status change, so the away clock is untouched.
 	pi.on("turn_end", async (_event, ctx) => {
 		updatePresence({ contextPercent: readContextPercent(ctx) });
-		if (showBranch) void refreshBranch();
+		if (showBranch) refreshBranch(); // backstop for filesystems where the HEAD watcher gets no events
 	});
 
 	// The error message is not shown: it can contain request details.
@@ -1169,6 +1204,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		sessionsWatcher = undefined;
 		if (sessionMarker) rmSync(sessionMarker, { force: true });
 		sessionMarker = undefined;
+		stopBranchWatch();
 		await clearDiscordPresence();
 		if (wslBridge) {
 			wslBridge.close();

@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- **Instant branch updates:** with Git branch on, a branch switch shows up right away instead of within 15 seconds, and the plugin no longer runs git every 15 seconds to check.
+
 ## [0.4.1] - 2026-11-02
 
 ### Changed

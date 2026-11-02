@@ -42,7 +42,7 @@ Hovering the large omp icon shows the omp version and how many omp sessions are 
 
 Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
 
-The current git branch can be added after the project name (`my-project @ main`; a detached HEAD shows the short commit). It is **off by default**, because branch names often reveal what you're working on. Turn it on in `/discord-presence settings`. A branch switch, by the agent or by you in another terminal, shows up after the next turn or within 15 seconds. Hidden projects never show their branch.
+The current git branch can be added after the project name (`my-project @ main`; a detached HEAD shows the short commit). It is **off by default**, because branch names often reveal what you're working on. Turn it on in `/discord-presence settings`. A branch switch, by the agent or by you in another terminal, shows up right away: the plugin watches the repo's `HEAD` instead of running git. Hidden projects never show their branch.
 
 After 15 minutes without a prompt (configurable in `/discord-presence settings`, or never), `idle` turns into `away`. The next prompt switches it back to `thinking`.
 
@@ -187,7 +187,7 @@ flowchart TD
         M["live model + effort<br/>(polled every 3 s)"]
         L["lobe-icons logo key"]
         G["GitHub visibility<br/>public → button<br/>private → auto-hide"]
-        BR["git branch<br/>(polled every 15 s while shown)"]
+        BR["git branch<br/>(HEAD watched while shown)"]
         A["app name + icon<br/>(Discord API)"]
         OS["open omp sessions<br/>(marker files, all processes)"]
     end
@@ -331,7 +331,7 @@ Press Tab after `/discord-presence ` to pick a subcommand from a list with short
 | Auto-hide private repos | on | `private project` when `origin` is a private GitHub repo, or its visibility can't be checked. |
 | Model, effort & logo | shown | When hidden, the model, its effort and the model logo are left out; the logo would reveal the model's maker. |
 | GitHub button | shown | The **View on GitHub** button for public repos. |
-| Git branch | hidden | Append `@ <branch>` to the project name. git is only polled while this is on. |
+| Git branch | hidden | Append `@ <branch>` to the project name. The repo's `HEAD` is only watched while this is on. |
 | Context usage | hidden | Append `context N%`. |
 | Timer | since latest prompt | What the elapsed time counts from: the latest prompt, or the session start. |
 | Away after | 15 min | Idle time before `away`: 5, 10, 15, 30 or 60 minutes, or never. |

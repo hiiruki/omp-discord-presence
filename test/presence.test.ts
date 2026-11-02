@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { getAgentDir } from "@oh-my-pi/pi-utils";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -206,6 +207,28 @@ describe("settings", () => {
 			expect(hobbyNow?.buttons).toHaveLength(1);
 			removeDir(work);
 			removeDir(hobby);
+		},
+		TIMEOUT,
+	);
+
+	test(
+		"the shown branch follows a checkout made outside omp, including a detached HEAD",
+		async () => {
+			writeFileSync(STATE_FILE, JSON.stringify({ showBranch: true }));
+			const dir = githubRepo("acme/branchy");
+			track(await startSession({ cwd: dir }));
+			await waitForActivity((a) => a?.details?.endsWith("branchy @ main") === true);
+
+			// No prompt or turn: only the HEAD watcher can notice these.
+			let mark = activities.length;
+			execFileSync("git", ["-C", dir, "checkout", "-q", "-b", "feature/x"]);
+			await waitForActivity((a) => a?.details?.endsWith("branchy @ feature/x") === true, { since: mark });
+
+			mark = activities.length;
+			const sha = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+			execFileSync("git", ["-C", dir, "checkout", "-q", "--detach"]);
+			await waitForActivity((a) => a?.details?.endsWith(`branchy @ ${sha.slice(0, 7)}`) === true, { since: mark });
+			removeDir(dir);
 		},
 		TIMEOUT,
 	);
