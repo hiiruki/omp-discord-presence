@@ -15,6 +15,8 @@ Status changes reach Discord within about 4 seconds. Updates are spaced out beca
 
 Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
 
+The current git branch can be added after the project name (`my-project @ main`; a detached HEAD shows the short commit). It is **off by default**, because branch names often reveal what you're working on. Turn it on in `/discord-presence settings`. A branch switch, by the agent or by you in another terminal, shows up after the next turn or within 15 seconds. Hidden projects never show their branch.
+
 After 15 minutes without a prompt (configurable in `/discord-presence settings`, or never), `idle` turns into `away`. The next prompt switches it back to `thinking`.
 
 Context-window usage can be shown at the end of the status (`… · effort: high · context 42%`). It is **off by default**. Turn it on in `/discord-presence settings` or with `/discord-presence context on`. The value updates after every turn.
@@ -229,6 +231,7 @@ Inside omp:
 │    Auto-hide private repos: on                      │
 │    Model, effort & logo: shown                      │
 │    GitHub button: shown                             │
+│    Git branch: hidden                               │
 │    Context usage: hidden                            │
 │    Away after: 15 min                               │
 │    Done                                             │
@@ -242,6 +245,7 @@ Inside omp:
 | Auto-hide private repos | on | `private project` when `origin` is a private GitHub repo, or its visibility can't be checked. |
 | Model, effort & logo | shown | When hidden, the model, its effort and the model logo are left out; the logo would reveal the model's maker. |
 | GitHub button | shown | The **View on GitHub** button for public repos. |
+| Git branch | hidden | Append `@ <branch>` to the project name. git is only polled while this is on. |
 | Context usage | hidden | Append `context N%`. |
 | Away after | 15 min | Idle time before `away`: 5, 10, 15, 30 or 60 minutes, or never. |
 
@@ -291,7 +295,8 @@ All settings and the hidden project list are global across omp projects and sess
   "showModel": true,
   "showButton": true,
   "awayMinutes": 15,
-  "autoHidePrivate": true
+  "autoHidePrivate": true,
+  "showBranch": false
 }
 ```
 

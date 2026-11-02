@@ -71,6 +71,8 @@ type GlobalState = {
 	awayMinutes: number;
 	/** Show "private project" when origin is a private (or unverifiable) GitHub repo. */
 	autoHidePrivate: boolean;
+	/** Opt-in: append the current git branch to the project name. */
+	showBranch: boolean;
 };
 
 const DEFAULT_STATE: GlobalState = {
@@ -81,6 +83,7 @@ const DEFAULT_STATE: GlobalState = {
 	showButton: true,
 	awayMinutes: 15,
 	autoHidePrivate: true,
+	showBranch: false,
 };
 
 type DiscordRpcClient = DiscordRPC.Client & {
@@ -114,6 +117,7 @@ const readGlobalState = (): GlobalState => {
 			showModel: parsed.showModel !== false,
 			showButton: parsed.showButton !== false,
 			autoHidePrivate: parsed.autoHidePrivate !== false,
+			showBranch: parsed.showBranch === true,
 			awayMinutes:
 				typeof awayMinutes === "number" && Number.isFinite(awayMinutes) && awayMinutes >= 0
 					? awayMinutes
@@ -168,6 +172,18 @@ const GITHUB_REMOTE = /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/;
 type RepoLookup = { url: string; slug: string } | { reason: string; mayBePrivate?: true };
 
 const LOOKUP_TIMEOUT_MS = 5_000;
+const BRANCH_POLL_MS = 15_000;
+
+/** The checked-out branch, or the short commit on a detached HEAD; undefined outside a git repo. */
+const readGitBranch = async (cwd: string): Promise<string | undefined> => {
+	const git = (...args: string[]) =>
+		execFileAsync("git", ["-C", cwd, ...args], { timeout: LOOKUP_TIMEOUT_MS }).then(({ stdout }) => stdout.trim());
+	try {
+		return (await git("branch", "--show-current")) || (await git("rev-parse", "--short", "HEAD")) || undefined;
+	} catch {
+		return undefined;
+	}
+};
 
 /** The public GitHub URL of cwd's `origin` remote, or why there is none. */
 const findPublicGithubRepo = async (cwd: string): Promise<RepoLookup> => {
@@ -312,7 +328,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let modes = ""; // formatted active omp modes, see formatModes
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
-	let { enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes, autoHidePrivate } = readGlobalState();
+	let { enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes, autoHidePrivate, showBranch } =
+		readGlobalState();
+	let branch: string | undefined;
 	let cwd = process.cwd();
 
 	let presence: PresenceState = {
@@ -322,6 +340,13 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	const autoHidden = () => autoHidePrivate && "mayBePrivate" in repo && repo.mayBePrivate === true;
 	const projectHidden = () => isProjectHidden(cwd, hiddenProjects) || autoHidden();
+
+	const refreshBranch = async () => {
+		const next = await readGitBranch(cwd);
+		if (next === branch) return;
+		branch = next;
+		if (showBranch) schedulePresenceUpdate();
+	};
 
 	const clearReconnectTimer = () => {
 		if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -358,10 +383,12 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const iconKey = presence.model && modelIconKey(presence.model);
 		const hidden = projectHidden();
 		const project = hidden ? PRIVATE_PROJECT_LABEL : normalizeProjectName(cwd);
+		// A branch name can reveal what a hidden project is, so it goes with the project name.
+		const branchSuffix = showBranch && branch && !hidden ? ` @ ${branch}` : "";
 		const largeImageKey = LARGE_IMAGE_KEY ?? app.iconUrl;
 
 		return {
-			details: truncateDiscordText(`omp v${VERSION} · ${project}${modes ? ` · ${modes}` : ""}`),
+			details: truncateDiscordText(`omp v${VERSION} · ${project}${branchSuffix}${modes ? ` · ${modes}` : ""}`),
 			state: truncateDiscordText(state),
 			startTimestamp: new Date(presence.startedAt),
 			largeImageKey,
@@ -478,8 +505,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 			showContext !== next.showContext ||
 			showModel !== next.showModel ||
 			showButton !== next.showButton ||
-			autoHidePrivate !== next.autoHidePrivate;
-		({ showContext, showModel, showButton, autoHidePrivate } = next);
+			autoHidePrivate !== next.autoHidePrivate ||
+			showBranch !== next.showBranch;
+		if (next.showBranch && !showBranch) branch = await readGitBranch(cwd); // read before the flush below
+		({ showContext, showModel, showButton, autoHidePrivate, showBranch } = next);
 		if (awayMinutes !== next.awayMinutes) {
 			awayMinutes = next.awayMinutes;
 			armAwayTimer();
@@ -556,7 +585,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			`  button: ${button}`,
 			lastActivity ? `  last update ${formatDuration(Date.now() - lastFlushAt)} ago` : "",
 			"",
-			`Project: ${normalizeProjectName(cwd)} · ${isProjectHidden(cwd, hiddenProjects) ? "hidden" : autoHidden() ? `hidden automatically (${"reason" in repo ? repo.reason : ""})` : "visible"}`,
+			`Project: ${normalizeProjectName(cwd)} · ${isProjectHidden(cwd, hiddenProjects) ? "hidden" : autoHidden() ? `hidden automatically (${"reason" in repo ? repo.reason : ""})` : "visible"} · branch ${showBranch ? (branch ?? "none (not a git repo)") : "hidden"}`,
 			`Context: ${showContext ? "shown" : "hidden"}${context === undefined ? "" : ` (now ${context}%)`} · ${away}`,
 			`Settings: ${GLOBAL_STATE_FILE}`,
 		]
@@ -594,6 +623,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 				},
 				{ label: `Model, effort & logo: ${toggle(state.showModel)}`, description: "e.g. anthropic/claude-opus · effort: high" },
 				{ label: `GitHub button: ${toggle(state.showButton)}`, description: "View on GitHub, public repos only" },
+				{ label: `Git branch: ${toggle(state.showBranch)}`, description: "e.g. my-project @ main" },
 				{ label: `Context usage: ${toggle(state.showContext)}`, description: "e.g. context 42%" },
 				{ label: `Away after: ${describeAway(state.awayMinutes)}`, description: "Idle time before the status turns away" },
 				{ label: "Done" },
@@ -612,7 +642,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 			} else if (index === 2) await applyGlobalState(writeGlobalState({ autoHidePrivate: !state.autoHidePrivate }));
 			else if (index === 3) await applyGlobalState(writeGlobalState({ showModel: !state.showModel }));
 			else if (index === 4) await applyGlobalState(writeGlobalState({ showButton: !state.showButton }));
-			else if (index === 5) await applyGlobalState(writeGlobalState({ showContext: !state.showContext }));
+			else if (index === 5) await applyGlobalState(writeGlobalState({ showBranch: !state.showBranch }));
+			else if (index === 6) await applyGlobalState(writeGlobalState({ showContext: !state.showContext }));
 			else {
 				const labels = AWAY_CHOICES.map((minutes) => describeAway(minutes) + (minutes === DEFAULT_STATE.awayMinutes ? " (default)" : ""));
 				const picked = await ctx.ui.select("Away after", labels, {
@@ -689,7 +720,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 		shuttingDown = false;
 		cwd = ctx.cwd;
 		watchGlobalState();
-		({ enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes, autoHidePrivate } = readGlobalState());
+		({ enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes, autoHidePrivate, showBranch } =
+			readGlobalState());
 		updatePresence({
 			status: "idle",
 			model: ctx.model,
@@ -712,10 +744,16 @@ export default function discordPresence(pi: ExtensionAPI) {
 			updatePresence({ model });
 		}, MODEL_POLL_MS);
 		repo = { reason: "checking GitHub" };
-		repoCheck = findPublicGithubRepo(ctx.cwd).then((lookup) => {
-			repo = lookup;
-			schedulePresenceUpdate();
-		});
+		repoCheck = Promise.all([
+			findPublicGithubRepo(ctx.cwd).then((lookup) => {
+				repo = lookup;
+			}),
+			refreshBranch(),
+		]).then(schedulePresenceUpdate);
+		// The agent (or you, in another terminal) may switch branches; only poll git while the branch is shown.
+		ctx.setInterval(() => {
+			if (showBranch) void refreshBranch();
+		}, BRANCH_POLL_MS);
 		if (enabled) void connect();
 	});
 
@@ -788,6 +826,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	// Context grows every turn; no status change, so the away clock is untouched.
 	pi.on("turn_end", async (_event, ctx) => {
 		updatePresence({ contextPercent: readContextPercent(ctx) });
+		if (showBranch) void refreshBranch();
 	});
 
 	// The error message is not shown: it can contain request details.
