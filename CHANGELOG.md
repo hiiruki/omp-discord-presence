@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- **Clear after** setting in `/discord-presence settings`: after 1, 2, 4 or 8 hours idle, the session disappears from Discord until the next prompt, so an unattended omp no longer shows for hours. Off by default.
+
 ## [0.4.3] - 2026-11-02
 
 ### Changed

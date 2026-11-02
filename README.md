@@ -15,7 +15,7 @@ using tool · bash · anthropic/claude-opus-4 · effort: high
 
 ## Features
 
-- **Live status:** idle, thinking, using a tool, waiting for you (approval, `ask`, plan review), compacting context, retrying, and away after a quiet period.
+- **Live status:** idle, thinking, using a tool, waiting for you (approval, `ask`, plan review), compacting context, retrying, and away after a quiet period. Optionally disappears from Discord after hours idle.
 - **Session details:** omp version, project name, active omp modes (plan, goal, loop, vibe), and the model with its effort. A model or effort switch shows within seconds, even without a prompt.
 - **Elapsed timer** since the latest prompt or since the session started (your choice), and a hover on the omp icon showing how many omp sessions are open.
 - **Model logo:** the model maker's logo as a small badge, from [lobe-icons](https://github.com/lobehub/lobe-icons) (156 logos, matched on the model id first, then the provider).
@@ -45,6 +45,8 @@ Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mo
 The current git branch can be added after the project name (`my-project @ main`; a detached HEAD shows the short commit). It is **off by default**, because branch names often reveal what you're working on. Turn it on in `/discord-presence settings`. A branch switch, by the agent or by you in another terminal, shows up right away: the plugin watches the repo's `HEAD` instead of running git. Hidden projects never show their branch.
 
 After 15 minutes without a prompt (configurable in `/discord-presence settings`, or never), `idle` turns into `away`. The next prompt switches it back to `thinking`.
+
+To stop showing an unattended session for hours, set **Clear after** in `/discord-presence settings` (1, 2, 4 or 8 hours idle; never by default). Past that time the session's activity is removed from Discord, and the next prompt brings it back.
 
 Context-window usage can be shown at the end of the status (`… · effort: high · context 42%`). It is **off by default**. Turn it on in `/discord-presence settings` or with `/discord-presence context on`. The value updates after every turn.
 
@@ -320,6 +322,7 @@ Press Tab after `/discord-presence ` to pick a subcommand from a list with short
 │    Context usage: hidden                            │
 │    Timer: since latest prompt                       │
 │    Away after: 15 min                               │
+│    Clear after: never                               │
 │    Done                                             │
 ╰─────────────────────────────────────────────────────╯
 ```
@@ -335,6 +338,7 @@ Press Tab after `/discord-presence ` to pick a subcommand from a list with short
 | Context usage | hidden | Append `context N%`. |
 | Timer | since latest prompt | What the elapsed time counts from: the latest prompt, or the session start. |
 | Away after | 15 min | Idle time before `away`: 5, 10, 15, 30 or 60 minutes, or never. |
+| Clear after | never | Idle time before the activity is removed from Discord until the next prompt: 1, 2, 4 or 8 hours, or never. |
 
 Every change is saved and applied live to all running sessions. Outside the TUI (print, RPC), `settings` points to the settings file instead.
 
@@ -377,7 +381,7 @@ Sent to Discord:
   last update 9s ago
 
 Project: omp-discord-presence · visible · branch hidden
-Context: hidden (now 2%) · idle 10s, away in 14m 50s
+Context: hidden (now 2%) · idle 10s, away in 14m 50s, cleared never
 Timer: since the latest prompt · 2 omp sessions open
 Project overrides: none
 Settings: /home/me/.omp/agent/discord-presence-state.json
@@ -409,6 +413,7 @@ With `omp --profile <name>`, that is the profile's agent directory (`~/.omp/prof
   "showModel": true,
   "showButton": true,
   "awayMinutes": 15,
+  "clearMinutes": 0,
   "timer": "prompt",
   "autoHidePrivate": true,
   "showBranch": false,

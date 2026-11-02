@@ -273,6 +273,27 @@ describe("subagents", () => {
 	);
 });
 
+describe("idle", () => {
+	test(
+		"a session idle past the clear time disappears from Discord and comes back with the next prompt",
+		async () => {
+			writeFileSync(STATE_FILE, JSON.stringify({ clearMinutes: 0.05 })); // 3 s
+			const dir = tempDir("odp-clear-");
+			const session = track(await startSession({ cwd: dir }));
+			await waitForActivity((a) => a?.state?.startsWith("idle") === true);
+
+			let mark = activities.length;
+			await waitForActivity((a) => a === null, { since: mark });
+
+			mark = activities.length;
+			await session.emit("agent_start");
+			await waitForActivity((a) => a?.state?.startsWith("thinking") === true, { since: mark });
+			removeDir(dir);
+		},
+		TIMEOUT,
+	);
+});
+
 describe("timer and hover", () => {
 	test(
 		"the timer restarts with each prompt by default, and stays at the session start when set to session",

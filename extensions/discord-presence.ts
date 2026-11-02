@@ -80,6 +80,8 @@ type GlobalState = {
 	showButton: boolean;
 	/** Minutes idle before the status turns "away"; 0 never. */
 	awayMinutes: number;
+	/** Minutes idle before the activity is removed from Discord until the next prompt; 0 never. */
+	clearMinutes: number;
 	/** What the elapsed timer counts from: the latest prompt, or the session start. */
 	timer: "prompt" | "session";
 	/** Show "private project" when origin is a private (or unverifiable) GitHub repo. */
@@ -102,6 +104,7 @@ const DEFAULT_STATE: GlobalState = {
 	showModel: true,
 	showButton: true,
 	awayMinutes: 15,
+	clearMinutes: 0,
 	timer: "prompt",
 	autoHidePrivate: true,
 	showBranch: false,
@@ -157,7 +160,9 @@ const parseProjects = (value: unknown): GlobalState["projects"] => {
 const readGlobalState = (): GlobalState => {
 	try {
 		const parsed = JSON.parse(readFileSync(GLOBAL_STATE_FILE, "utf8")) as Partial<Record<keyof GlobalState, unknown>>;
-		const awayMinutes = parsed.awayMinutes;
+		const { awayMinutes, clearMinutes } = parsed;
+		const minutes = (value: unknown, fallback: number) =>
+			typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
 		return {
 			enabled: parsed.enabled !== false,
 			hiddenProjects: Array.isArray(parsed.hiddenProjects)
@@ -170,10 +175,8 @@ const readGlobalState = (): GlobalState => {
 			showBranch: parsed.showBranch === true,
 			projects: parseProjects(parsed.projects),
 			timer: parsed.timer === "session" ? "session" : "prompt",
-			awayMinutes:
-				typeof awayMinutes === "number" && Number.isFinite(awayMinutes) && awayMinutes >= 0
-					? awayMinutes
-					: DEFAULT_STATE.awayMinutes,
+			awayMinutes: minutes(awayMinutes, DEFAULT_STATE.awayMinutes),
+			clearMinutes: minutes(clearMinutes, DEFAULT_STATE.clearMinutes),
 		};
 	} catch {
 		return { ...DEFAULT_STATE };
@@ -506,6 +509,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let updateTimer: NodeJS.Timeout | undefined;
 	let lastFlushAt = 0;
 	let awayTimer: NodeJS.Timeout | undefined;
+	let clearTimer: NodeJS.Timeout | undefined;
+	let idleCleared = false; // idle past clearMinutes: Discord shows nothing until the next status change
 	const runningTools = new Map<string, string>(); // toolCallId -> toolName
 	const pendingApprovals = new Map<string, string>(); // toolCallId -> toolName awaiting the user's approval
 	let planReviewOpen = false;
@@ -518,7 +523,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let sessionStartedAt = Date.now();
 	let shuttingDown = false;
 	const initial = readGlobalState();
-	let { enabled, hiddenProjects, awayMinutes, autoHidePrivate, timer } = initial;
+	let { enabled, hiddenProjects, awayMinutes, clearMinutes, autoHidePrivate, timer } = initial;
 	// Display settings in force for cwd: global values with this project's overrides applied.
 	let { showContext, showModel, showButton, showBranch } = effectiveSettings(initial, process.cwd());
 	let projectOverrides: ProjectOverrides = {};
@@ -637,7 +642,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		try {
 			lastFlushAt = Date.now();
 			const activity = buildActivity();
-			await rpc.setActivity(activity);
+			await rpc.setActivity(idleCleared ? undefined : activity);
 			lastActivity = activity;
 		} catch {
 			// Discord stopped answering: drop this connection rather than leave its socket open next to the new one.
@@ -654,22 +659,34 @@ export default function discordPresence(pi: ExtensionAPI) {
 		updateTimer = setTimeout(() => void flushPresence(), delay);
 	};
 
-	// Arms the "away" timer from idleSince, so a changed awayMinutes applies to the current idle stretch.
-	const armAwayTimer = () => {
+	// Arms the "away" and clear timers from idleSince, so a changed setting applies to the current idle stretch.
+	const armIdleTimers = () => {
 		clearTimeout(awayTimer);
-		if (presence.status !== "idle" || idleSince === undefined || awayMinutes <= 0) return;
-		const remaining = Math.max(0, idleSince + awayMinutes * 60_000 - Date.now());
-		awayTimer = setTimeout(() => updatePresence({ status: "away" }), remaining);
-		awayTimer.unref(); // never keep omp (e.g. print mode) alive just to flip to "away"
+		clearTimeout(clearTimer);
+		if (idleSince === undefined) return;
+		if (presence.status === "idle" && awayMinutes > 0) {
+			const remaining = Math.max(0, idleSince + awayMinutes * 60_000 - Date.now());
+			awayTimer = setTimeout(() => updatePresence({ status: "away" }), remaining);
+			awayTimer.unref(); // never keep omp (e.g. print mode) alive just to flip to "away"
+		}
+		if (clearMinutes > 0 && !idleCleared) {
+			const remaining = Math.max(0, idleSince + clearMinutes * 60_000 - Date.now());
+			clearTimer = setTimeout(() => {
+				idleCleared = true;
+				schedulePresenceUpdate();
+			}, remaining);
+			clearTimer.unref();
+		}
 	};
 
 	const updatePresence = (patch: Partial<PresenceState>) => {
 		presence = { ...presence, ...patch };
-		// Any status change restarts the idle clock; only a quiet "idle" turns into "away".
+		// Any status change restarts the idle clock; only a quiet "idle" turns into "away", and then gets cleared.
 		if (patch.status) {
 			if (patch.status === "idle") idleSince = Date.now();
 			else if (patch.status !== "away") idleSince = undefined;
-			armAwayTimer();
+			if (patch.status !== "away") idleCleared = false;
+			armIdleTimers();
 		}
 		schedulePresenceUpdate();
 	};
@@ -731,9 +748,12 @@ export default function discordPresence(pi: ExtensionAPI) {
 		else if (!showBranch) stopBranchWatch();
 		autoHidePrivate = next.autoHidePrivate;
 		timer = next.timer;
-		if (awayMinutes !== next.awayMinutes) {
-			awayMinutes = next.awayMinutes;
-			armAwayTimer();
+		if (awayMinutes !== next.awayMinutes || clearMinutes !== next.clearMinutes) {
+			({ awayMinutes, clearMinutes } = next);
+			// A longer (or no) clear time brings a cleared activity back; armIdleTimers re-clears it if still due.
+			if (idleCleared) schedulePresenceUpdate();
+			idleCleared = false;
+			armIdleTimers();
 		}
 		if (projectHidden() !== wasHidden || displayChanged) await flushPresence();
 
@@ -802,14 +822,21 @@ export default function discordPresence(pi: ExtensionAPI) {
 				: "url" in repo
 					? `View on GitHub → ${repo.url}`
 					: `none (${repo.reason})`;
+		const idleFor = formatDuration(Date.now() - (idleSince ?? Date.now()));
 		const away =
-			presence.status === "away"
-				? `away (idle ${formatDuration(Date.now() - (idleSince ?? Date.now()))})`
-				: idleSince !== undefined
-					? awayMinutes > 0
-						? `idle ${formatDuration(Date.now() - idleSince)}, away in ${formatDuration(Math.max(0, idleSince + awayMinutes * 60_000 - Date.now()))}`
-						: `idle ${formatDuration(Date.now() - idleSince)}, away never`
-					: "active";
+			idleSince === undefined
+				? "active"
+				: [
+						presence.status === "away" ? `away (idle ${idleFor})` : `idle ${idleFor}`,
+						presence.status === "away"
+							? undefined
+							: `away ${awayMinutes > 0 ? `in ${formatDuration(Math.max(0, idleSince + awayMinutes * 60_000 - Date.now()))}` : "never"}`,
+						idleCleared
+							? "cleared from Discord until the next prompt"
+							: `cleared ${clearMinutes > 0 ? `in ${formatDuration(Math.max(0, idleSince + clearMinutes * 60_000 - Date.now()))}` : "never"}`,
+					]
+						.filter(Boolean)
+						.join(", ");
 		const context = readContextPercent(ctx);
 		return [
 			`Discord presence: ${enabled ? "enabled" : "disabled"} · ${connected ? `connected (${transport})` : "not connected"}`,
@@ -846,6 +873,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	const AWAY_CHOICES = [5, 10, 15, 30, 60, 0];
 	const describeAway = (minutes: number) => (minutes > 0 ? `${minutes} min` : "never");
+	const CLEAR_CHOICES = [60, 120, 240, 480, 0];
+	const describeClear = (minutes: number) => (minutes > 0 ? `${minutes / 60} h idle` : "never");
 
 	const SETTING_LABELS: Record<ProjectSetting, [label: string, description: string]> = {
 		showModel: ["Model, effort & logo", "e.g. anthropic/claude-opus · effort: high"],
@@ -956,6 +985,20 @@ export default function discordPresence(pi: ExtensionAPI) {
 							if (minutes !== undefined) await applyGlobalState(writeGlobalState({ awayMinutes: minutes }));
 						},
 					},
+					{
+						label: `Clear after: ${describeClear(state.clearMinutes)}`,
+						description: "Idle time before omp disappears from Discord, until the next prompt",
+						run: async () => {
+							const labels = CLEAR_CHOICES.map(
+								(minutes) => describeClear(minutes) + (minutes === DEFAULT_STATE.clearMinutes ? " (default)" : ""),
+							);
+							const picked = await ctx.ui.select("Clear after", labels, {
+								initialIndex: Math.max(0, CLEAR_CHOICES.indexOf(state.clearMinutes)),
+							});
+							const minutes = CLEAR_CHOICES[labels.indexOf(picked ?? "")];
+							if (minutes !== undefined) await applyGlobalState(writeGlobalState({ clearMinutes: minutes }));
+						},
+					},
 				);
 			}
 			items.push({ label: "Done" });
@@ -1054,7 +1097,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		cwd = ctx.cwd;
 		watchGlobalState();
 		const state = readGlobalState();
-		({ enabled, hiddenProjects, awayMinutes, autoHidePrivate, timer } = state);
+		({ enabled, hiddenProjects, awayMinutes, clearMinutes, autoHidePrivate, timer } = state);
 		({ showContext, showModel, showButton, showBranch } = effectiveSettings(state, cwd));
 		const key = projectKeyFor(cwd, state.projects);
 		projectOverrides = key ? state.projects[key]! : {};
@@ -1218,6 +1261,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		subagentListeners.delete(onSubagentsChanged);
 		shuttingDown = true;
 		clearTimeout(awayTimer);
+		clearTimeout(clearTimer);
 		stateWatcher?.close();
 		stateWatcher = undefined;
 		sessionsWatcher?.close();
