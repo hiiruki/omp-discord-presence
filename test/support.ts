@@ -12,6 +12,8 @@ import { join } from "node:path";
 export const githubRepos = new Map<string, number>();
 /** Art Asset keys the fake Discord application has uploaded. */
 export const uploadedAssets = new Set<string>();
+/** Switches for the stubbed services; tests reset them in beforeEach. */
+export const network = { discordApiUp: true };
 
 export type Activity = {
 	details?: string;
@@ -34,7 +36,10 @@ export const stubNetwork = () => {
 		const repo = /api\.github\.com\/repos\/(.+)$/.exec(url)?.[1];
 		if (repo) return json({}, githubRepos.get(repo) ?? 200);
 		// An icon makes the extension send a large image, which carries the hover text.
-		if (/discord\.com\/api\/v10\/applications\/\d+\/rpc$/.test(url)) return json({ name: "OH MY PI", icon: "abc123" });
+		if (/discord\.com\/api\/v10\/applications\/\d+\/rpc$/.test(url)) {
+			if (!network.discordApiUp) throw new TypeError("fetch failed");
+			return json({ name: "OH MY PI", icon: "abc123" });
+		}
 		if (/discord\.com\/api\/v10\/oauth2\/applications\/\d+\/assets$/.test(url)) {
 			return json([...uploadedAssets].map((name) => ({ name })));
 		}

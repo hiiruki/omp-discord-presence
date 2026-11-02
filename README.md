@@ -38,7 +38,7 @@ Status changes reach Discord within about 4 seconds. Updates are spaced out beca
 
 The elapsed time on Discord counts from the latest prompt by default. Set **Timer** to *since session start* in `/discord-presence settings` to count from when the omp session opened instead.
 
-Hovering the large omp icon shows the omp version and how many omp sessions are open on this machine, e.g. `oh-my-pi v18.15.0 · 2 sessions open`. Every omp process counts. Each main session leaves a marker file in `discord-presence-sessions/` in omp's agent directory and removes it on exit. Markers left by a crashed process are dropped the next time the sessions are counted.
+Hovering the large omp icon shows the omp version and how many omp sessions are open on this machine, e.g. `oh-my-pi v18.15.0 · 2 sessions open`. Every omp process counts. Each main session leaves a marker file in `discord-presence-sessions/` in omp's agent directory and removes it on exit. Markers left by a crashed process are dropped the next time the sessions are counted. The app's name and icon are cached in `discord-presence-app.json` there, so the icon shows from a session's first update, even while Discord's API is unreachable.
 
 Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
 
@@ -131,7 +131,7 @@ Restart omp. When the plugin's last session ends, it clears its activity from Di
 - **Pause without uninstalling:**
   - `/discord-presence off` stops the presence in every session, and `/discord-presence on` resumes it;
   - `omp plugin disable omp-discord-presence` (and `enable`) stops omp from loading the plugin at all.
-- **Remove the saved settings too:** `rm ~/.omp/agent/discord-presence-state.json`.
+- **Remove the saved settings and caches too:** `rm -r ~/.omp/agent/discord-presence-*`.
 
 ## Platform support
 
@@ -188,7 +188,7 @@ flowchart TD
         L["lobe-icons logo key"]
         G["GitHub visibility<br/>public → button<br/>private → auto-hide"]
         BR["git branch<br/>(HEAD watched while shown)"]
-        A["app name + icon<br/>(Discord API)"]
+        A["app name + icon<br/>(Discord API, cached)"]
         OS["open omp sessions<br/>(marker files, all processes)"]
     end
 

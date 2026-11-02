@@ -232,24 +232,48 @@ const formatModes = (state: SessionModeState | undefined): string =>
 				.join(" + ")
 		: "";
 
+/** Write-then-rename, so a concurrent reader never sees a half-written file. */
+const writeJsonAtomic = (file: string, data: unknown) => {
+	mkdirSync(dirname(file), { recursive: true });
+	const tmp = `${file}.${process.pid}.tmp`;
+	writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`);
+	renameSync(tmp, file);
+};
+
 const writeGlobalState = (patch: Partial<GlobalState>): GlobalState => {
 	const next = { ...readGlobalState(), ...patch };
-	mkdirSync(dirname(GLOBAL_STATE_FILE), { recursive: true });
-	// Write-then-rename so concurrent sessions never read a half-written file (and briefly leak hidden names).
-	const tmp = `${GLOBAL_STATE_FILE}.${process.pid}.tmp`;
-	writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
-	renameSync(tmp, GLOBAL_STATE_FILE);
+	// Atomic so other sessions never read a half-written file (and briefly leak hidden names).
+	writeJsonAtomic(GLOBAL_STATE_FILE, next);
 	return next;
 };
 
+type AppInfo = { name?: string; iconUrl?: string };
+
 /** Public application info (no auth): the name Discord shows as the activity title, and its icon. */
-const fetchAppInfo = async (): Promise<{ name?: string; iconUrl?: string }> => {
+const fetchAppInfo = async (): Promise<AppInfo> => {
 	try {
 		const response = await fetch(`https://discord.com/api/v10/applications/${CLIENT_ID}/rpc`);
 		const app = (await response.json()) as { name?: string; icon?: string | null };
 		return {
 			name: app.name,
 			iconUrl: app.icon ? `https://cdn.discordapp.com/app-icons/${CLIENT_ID}/${app.icon}.png?size=512` : undefined,
+		};
+	} catch {
+		return {};
+	}
+};
+
+// The last fetched app info, so the first update of a session already carries the large image (Discord drops the
+// model logo without one) and a Discord API outage doesn't strip it. Refreshed in the background every session.
+const APP_CACHE_FILE = join(getAgentDir(), "discord-presence-app.json");
+
+const readCachedAppInfo = (): AppInfo => {
+	try {
+		const cached = JSON.parse(readFileSync(APP_CACHE_FILE, "utf8")) as Record<string, unknown>;
+		if (cached.clientId !== CLIENT_ID) return {};
+		return {
+			name: typeof cached.name === "string" ? cached.name : undefined,
+			iconUrl: typeof cached.iconUrl === "string" ? cached.iconUrl : undefined,
 		};
 	} catch {
 		return {};
@@ -306,9 +330,7 @@ const writeVisibility = (slug: string, isPublic: boolean) => {
 		const cache = readVisibilityCache();
 		if (cache[slug] === isPublic) return;
 		cache[slug] = isPublic;
-		const tmp = `${VISIBILITY_CACHE_FILE}.${process.pid}.tmp`;
-		writeFileSync(tmp, `${JSON.stringify(cache, null, 2)}\n`);
-		renameSync(tmp, VISIBILITY_CACHE_FILE);
+		writeJsonAtomic(VISIBILITY_CACHE_FILE, cache);
 	} catch {
 		// A cache we can't write only costs the next session a network round trip.
 	}
@@ -487,7 +509,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let rpc: DiscordRpcClient | undefined;
 	let connected = false;
 	let reconnectTimer: NodeJS.Timeout | undefined;
-	let app: { name?: string; iconUrl?: string } = {};
+	let app: AppInfo = {};
 	let repo: RepoLookup = { reason: "not checked yet" };
 	// Flushes wait for the repo check, so a private repo's name is never sent before it is known to be private.
 	let repoCheck: Promise<unknown> = Promise.resolve();
@@ -1060,11 +1082,23 @@ export default function discordPresence(pi: ExtensionAPI) {
 			sessionStartedAt = Date.now();
 			registerSession();
 		}
-		// Discord hides the small (brand) image without a large one; default to the app's own icon.
-		if (!app.name) void fetchAppInfo().then((info) => {
-			app = info;
-			schedulePresenceUpdate();
-		});
+		// Discord hides the small (brand) image without a large one: start from the cached app icon, then refresh it.
+		if (!app.name) {
+			app = readCachedAppInfo();
+			void fetchAppInfo()
+				.then((info) => {
+					if (!info.name) return; // Discord's API unreachable: keep the cached copy
+					if (info.name === app.name && info.iconUrl === app.iconUrl) return;
+					app = info;
+					try {
+						writeJsonAtomic(APP_CACHE_FILE, { clientId: CLIENT_ID, ...info });
+					} catch {
+						// Only costs the next session's first update its large image.
+					}
+					schedulePresenceUpdate();
+				})
+				.catch(() => {});
+		}
 		modes = formatModes(ctx.sessionModes?.getState()); // TUI only; mode_changed covers the rest
 		// omp emits no model/effort change event; poll the live selection so a switch shows without a prompt.
 		let lastEffort = pi.getThinkingLevel();

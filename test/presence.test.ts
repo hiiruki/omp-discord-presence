@@ -7,6 +7,7 @@ import {
 	activities,
 	githubRepo,
 	githubRepos,
+	network,
 	removeDir,
 	startSession,
 	tempDir,
@@ -17,6 +18,7 @@ import {
 const TIMEOUT = 40_000;
 const STATE_FILE = join(getAgentDir(), "discord-presence-state.json");
 const VISIBILITY_CACHE = join(getAgentDir(), "discord-presence-github.json");
+const APP_CACHE = join(getAgentDir(), "discord-presence-app.json");
 
 let cleanups: (() => unknown)[] = [];
 const track = <T extends { shutdown: () => unknown }>(session: T) => {
@@ -27,7 +29,9 @@ const track = <T extends { shutdown: () => unknown }>(session: T) => {
 beforeEach(() => {
 	rmSync(STATE_FILE, { force: true });
 	rmSync(VISIBILITY_CACHE, { force: true });
+	rmSync(APP_CACHE, { force: true });
 	githubRepos.clear();
+	network.discordApiUp = true;
 	activities.length = 0; // each test only sees activities sent during it
 });
 afterEach(async () => {
@@ -323,6 +327,25 @@ describe("timer and hover", () => {
 			expect(activities.at(-1)?.assets?.large_text).toMatch(/^oh-my-pi v\S+ · 1 session open$/);
 			removeDir(dirA);
 			removeDir(dirB);
+		},
+		TIMEOUT,
+	);
+
+	test(
+		"the app icon from an earlier session is shown even while Discord's API is unreachable",
+		async () => {
+			const dir = tempDir("odp-appcache-");
+			const first = await startSession({ cwd: dir });
+			await waitForActivity((a) => a?.assets?.large_image?.includes("/app-icons/") === true);
+			await first.shutdown();
+
+			network.discordApiUp = false;
+			const mark = activities.length;
+			track(await startSession({ cwd: dir }));
+			const shown = await waitForActivity((a) => a?.state?.startsWith("idle") === true, { since: mark });
+			expect(shown?.assets?.large_image).toContain("/app-icons/");
+			expect(shown?.assets?.large_text).toMatch(/^oh-my-pi v/);
+			removeDir(dir);
 		},
 		TIMEOUT,
 	);

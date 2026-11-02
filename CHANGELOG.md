@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - **Instant branch updates:** with Git branch on, a branch switch shows up right away instead of within 15 seconds, and the plugin no longer runs git every 15 seconds to check.
+- **Icon from the first update:** the omp icon, and the model logo Discord shows next to it, no longer go missing for the first update of a session or while Discord's API is unreachable. The app's name and icon are cached.
 
 ## [0.4.1] - 2026-11-02
 
