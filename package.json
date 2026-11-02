@@ -1,21 +1,35 @@
 {
   "name": "omp-discord-presence",
-  "version": "0.1.0",
-  "description": "Discord Rich Presence extension for omp (oh-my-pi) coding agent.",
+  "version": "0.2.0",
+  "description": "Discord Rich Presence for omp (oh-my-pi): live status, model logos, GitHub button, subagent party and privacy controls. Works on Windows, macOS, Linux and WSL.",
   "author": "Hiiruki",
   "type": "module",
   "keywords": [
     "omp-package",
     "omp",
     "oh-my-pi",
+    "omp-plugin",
     "discord",
-    "rich-presence"
+    "discord-rpc",
+    "rich-presence",
+    "discord-presence",
+    "coding-agent",
+    "ai"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/hiiruki/omp-discord-presence#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiiruki/omp-discord-presence.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hiiruki/omp-discord-presence/issues"
+  },
   "files": [
     "extensions",
     "bin",
-    "assets"
+    "assets",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "typecheck": "tsgo --noEmit",
