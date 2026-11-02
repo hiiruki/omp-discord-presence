@@ -383,11 +383,13 @@ Settings: /home/me/.omp/agent/discord-presence-state.json
 
 `hide` replaces the project name with `private project` on Discord. It applies to the current directory and everything below it, so a session started in a subdirectory of a hidden project stays hidden. `show` removes every hidden entry that covers the current directory.
 
-All settings, per-project overrides and the hidden project list are shared by every omp session, and changes apply live to every running session. They are stored at:
+All settings, per-project overrides and the hidden project list are shared by every omp session, and changes apply live to every running session. They are stored in omp's agent directory:
 
 ```text
 ~/.omp/agent/discord-presence-state.json
 ```
+
+With `omp --profile <name>`, that is the profile's agent directory (`~/.omp/profiles/<name>/agent/` by default), so each profile keeps its own settings. `PI_CODING_AGENT_DIR` moves it too.
 
 ```json
 {
@@ -411,19 +413,56 @@ All settings, per-project overrides and the hidden project list are shared by ev
 - **Status stays "not connected" right after restarting omp many times in a row:** Discord briefly stops answering when clients reconnect rapidly. Wait a minute.
 - **Logo badge is blank:** run `/discord-presence status`. `logo: … ✗ not uploaded` means that Art Asset is missing from the Discord application (see below). `logo: none` means no lobe-icons rule matches the model.
 
+## Development
+
+```bash
+pnpm install
+pnpm typecheck   # tsgo
+pnpm lint        # oxlint
+pnpm test        # bun test, about 30 s
+omp -e .         # try the checkout in a real omp session
+```
+
+The tests drive the extension the way omp does, against a fake Discord IPC server and a stubbed network:
+
+- **Unit tests:** GitHub remote parsing (credentials are never captured), model-logo matching, per-project setting precedence.
+- **Logo assets:** every logo key has a PNG, every PNG is reachable, Discord's 300-asset and 512 px limits are respected.
+- **Behaviour:** the status flow with parallel tools, approval waiting that never sends the reason, a private repo's name never being sent, the GitHub button and `hide`, per-project overrides reaching subdirectory sessions live, the subagent party, presence off, and Tab completion.
+
+They run with a throwaway omp agent directory (`PI_CODING_AGENT_DIR`) and Discord socket (`XDG_RUNTIME_DIR`). `test/preload.ts` refuses to run if the override doesn't take, so your real settings and Discord are never touched.
+
+**CI** (`.github/workflows/ci.yml`) runs typecheck, lint, the tests and an `npm pack` dry run on every push to `main` and every pull request.
+
 ## Publishing a release (maintainer)
 
+Releases are published by GitHub Actions (`.github/workflows/release.yml`) when a version tag is pushed:
+
 1. Add the changes under `## [Unreleased]` in `CHANGELOG.md`, then rename that heading to the new version and date and update the compare links at the bottom.
-2. Bump `version` in `package.json`: patch for fixes, minor for features (while below 1.0). npm rejects republishing a version.
-3. Commit as `chore(release): x.y.z`, tag `vx.y.z`, push with tags, then publish:
+2. Bump `version` in `package.json`: patch for fixes, minor for features (while below 1.0).
+3. Commit as `chore(release): x.y.z`, tag `vx.y.z`, and push both:
 
    ```bash
-   npm login      # once
-   git push origin main --tags
-   npm publish
+   git tag -s vx.y.z -m vx.y.z
+   git push origin main vx.y.z
    ```
 
-4. Users pick it up with `omp plugin upgrade omp-discord-presence`.
+4. The workflow then:
+   1. reruns CI;
+   2. checks that the tag matches `package.json` and that `CHANGELOG.md` has the version;
+   3. runs `npm publish` with provenance;
+   4. creates the GitHub release from that changelog section.
+5. Users pick it up with `omp plugin upgrade omp-discord-presence`.
+
+**One-time setup: npm trusted publishing.** The workflow publishes without a token, through OIDC. On npmjs.com, open the package → **Settings → Trusted Publisher**, choose **GitHub Actions**, and enter:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | `hiiruki` |
+| Repository | `omp-discord-presence` |
+| Workflow filename | `release.yml` |
+| Environment name | `npm` |
+
+The `npm` environment is created in the GitHub repo on the first run. Add required reviewers to it under **Settings → Environments** if releases should wait for approval. Publishing by hand still works with `npm publish`.
 
 The package ships only `extensions/`, `bin/`, `assets/` and `CHANGELOG.md` (plus `README.md`, `LICENSE` and `package.json`, which npm always includes), about 1.9 MB. `@oh-my-pi/pi-coding-agent` and `@oh-my-pi/pi-utils` are optional peers resolved from the running omp, so installing the plugin doesn't pull a second copy of omp.
 

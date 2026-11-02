@@ -1,5 +1,6 @@
 {
   "name": "omp-discord-presence",
+  "packageManager": "pnpm@12.16.1",
   "version": "0.2.0",
   "description": "Discord Rich Presence for omp (oh-my-pi): live status, model logos, GitHub button, subagent party and privacy controls. Works on Windows, macOS, Linux and WSL.",
   "author": "Hiiruki",
@@ -33,7 +34,8 @@
   ],
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "lint": "oxlint extensions scripts",
+    "lint": "oxlint extensions scripts test",
+    "test": "bun test",
     "sync-icons": "bun scripts/sync-model-icons.ts"
   },
   "dependencies": {
@@ -43,6 +45,7 @@
     "@oh-my-pi/pi-catalog": "^18.14.2",
     "@oh-my-pi/pi-coding-agent": "^18.14.2",
     "@oh-my-pi/pi-utils": "^18.14.2",
+    "@types/bun": "^1.4.4",
     "@types/discord-rpc": "^4.0.10",
     "@types/node": "^24.0.0",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",

@@ -1,11 +1,11 @@
 import type { ExtensionAPI, ExtensionContext, SessionModeState } from "@oh-my-pi/pi-coding-agent";
 import DiscordRPC from "discord-rpc";
-// Resolved by omp's loader to the running host, so this is the installed omp version, not a bundled copy.
-import { VERSION } from "@oh-my-pi/pi-utils";
+// Resolved by omp's loader to the running host, so these are the installed omp's version and active profile dir.
+import { getAgentDir, VERSION } from "@oh-my-pi/pi-utils";
 import { execFile, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { createConnection, createServer, type Server } from "node:net";
-import { homedir, release } from "node:os";
+import { release } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MODEL_ICON_RULES, PROVIDER_ICON_RULES, type IconRule } from "./model-icons.generated.ts";
@@ -24,7 +24,8 @@ const modelIconKey = (model: { provider: string; id: string }): string | undefin
 	const hit = (rules: typeof MODEL_ICONS, value: string) => rules.find(([patterns]) => patterns.some((p) => p.test(value)));
 	return (hit(MODEL_ICONS, model.id.toLowerCase()) ?? hit(PROVIDER_ICONS, model.provider.toLowerCase()))?.[1] ?? undefined;
 };
-const GLOBAL_STATE_FILE = join(homedir(), ".omp", "agent", "discord-presence-state.json");
+// omp's agent dir: ~/.omp/agent by default, the profile's dir under `omp --profile`, or PI_CODING_AGENT_DIR.
+const GLOBAL_STATE_FILE = join(getAgentDir(), "discord-presence-state.json");
 const RECONNECT_DELAY_MS = 15_000;
 const MODEL_POLL_MS = 3_000;
 const PRESENCE_UPDATE_DEBOUNCE_MS = 750;
@@ -356,6 +357,10 @@ const readContextPercent = (ctx: ExtensionContext): number | undefined => {
 	const percent = ctx.getContextUsage()?.percent;
 	return percent !== undefined && Number.isFinite(percent) ? Math.round(percent) : undefined;
 };
+
+// Test seams: pure helpers covered by test/*.test.ts. omp only uses the default export.
+export { DEFAULT_STATE, effectiveSettings, formatDuration, GITHUB_REMOTE, modelIconKey };
+export type { GlobalState };
 
 export default function discordPresence(pi: ExtensionAPI) {
 	let isSubagent = false;
