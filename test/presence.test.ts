@@ -1,6 +1,6 @@
 import { getAgentDir } from "@oh-my-pi/pi-utils";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	activities,
@@ -201,6 +201,65 @@ describe("subagents", () => {
 				{ since: mark },
 			);
 			removeDir(dir);
+		},
+		TIMEOUT,
+	);
+});
+
+describe("timer and hover", () => {
+	test(
+		"the timer restarts with each prompt by default, and stays at the session start when set to session",
+		async () => {
+			const dir = tempDir("odp-timer-");
+			const name = dir.split("/").at(-1)!;
+			const session = track(await startSession({ cwd: dir }));
+			const first = await waitForActivity((a) => a?.state?.startsWith("idle") === true);
+			const sessionStart = first!.timestamps!.start!;
+
+			// Per prompt (default): agent_start moves the start forward. The first update already waited out the
+			// 0.75 s debounce, so the prompt starts strictly later than the session.
+			let mark = activities.length;
+			await session.emit("agent_start");
+			const prompt = await waitForActivity((a) => a?.state?.startsWith("thinking") === true, { since: mark });
+			expect(prompt!.timestamps!.start!).toBeGreaterThan(sessionStart);
+
+			// Switched to per session from the settings menu: back to the session start, and prompts no longer move it.
+			mark = activities.length;
+			await session.settings("Timer");
+			await waitForActivity((a) => a?.details?.endsWith(name) === true && a.timestamps?.start === sessionStart, {
+				since: mark,
+			});
+			mark = activities.length;
+			await session.emit("agent_end");
+			await session.emit("agent_start");
+			const later = await waitForActivity((a) => a?.state?.startsWith("thinking") === true, { since: mark });
+			expect(later!.timestamps!.start).toBe(sessionStart);
+			removeDir(dir);
+		},
+		TIMEOUT,
+	);
+
+	test(
+		"the large image hover counts open omp sessions and ignores ones that crashed",
+		async () => {
+			const sessionsDir = join(getAgentDir(), "discord-presence-sessions");
+			mkdirSync(sessionsDir, { recursive: true });
+			const crashed = join(sessionsDir, "999999999-1"); // a pid no process can have
+			writeFileSync(crashed, "");
+
+			const dirA = tempDir("odp-hover-a-");
+			const dirB = tempDir("odp-hover-b-");
+			track(await startSession({ cwd: dirA }));
+			const b = await startSession({ cwd: dirB });
+			await waitForActivity((a) => a?.assets?.large_text?.endsWith("· 2 sessions open") === true);
+			expect(existsSync(crashed)).toBe(false);
+
+			const mark = activities.length;
+			await b.shutdown();
+			await waitForActivity((a) => a?.assets?.large_text?.endsWith("· 1 session open") === true, { since: mark });
+			expect(activities.at(-1)?.assets?.large_text).toMatch(/^oh-my-pi v\S+ · 1 session open$/);
+			removeDir(dirA);
+			removeDir(dirB);
 		},
 		TIMEOUT,
 	);

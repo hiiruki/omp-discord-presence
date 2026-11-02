@@ -3,7 +3,17 @@ import DiscordRPC from "discord-rpc";
 // Resolved by omp's loader to the running host, so these are the installed omp's version and active profile dir.
 import { getAgentDir, VERSION } from "@oh-my-pi/pi-utils";
 import { execFile, spawn } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import {
+	chmodSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	watch,
+	writeFileSync,
+	type FSWatcher,
+} from "node:fs";
 import { createConnection, createServer, type Server } from "node:net";
 import { release } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
@@ -70,6 +80,8 @@ type GlobalState = {
 	showButton: boolean;
 	/** Minutes idle before the status turns "away"; 0 never. */
 	awayMinutes: number;
+	/** What the elapsed timer counts from: the latest prompt, or the session start. */
+	timer: "prompt" | "session";
 	/** Show "private project" when origin is a private (or unverifiable) GitHub repo. */
 	autoHidePrivate: boolean;
 	/** Opt-in: append the current git branch to the project name. */
@@ -90,6 +102,7 @@ const DEFAULT_STATE: GlobalState = {
 	showModel: true,
 	showButton: true,
 	awayMinutes: 15,
+	timer: "prompt",
 	autoHidePrivate: true,
 	showBranch: false,
 	projects: {},
@@ -169,6 +182,7 @@ const readGlobalState = (): GlobalState => {
 			autoHidePrivate: parsed.autoHidePrivate !== false,
 			showBranch: parsed.showBranch === true,
 			projects: parseProjects(parsed.projects),
+			timer: parsed.timer === "session" ? "session" : "prompt",
 			awayMinutes:
 				typeof awayMinutes === "number" && Number.isFinite(awayMinutes) && awayMinutes >= 0
 					? awayMinutes
@@ -177,6 +191,36 @@ const readGlobalState = (): GlobalState => {
 	} catch {
 		return { ...DEFAULT_STATE };
 	}
+};
+
+// One marker file per running main session, named "<pid>-<n>", so every omp process can count the open sessions.
+const SESSIONS_DIR = join(getAgentDir(), "discord-presence-sessions");
+let sessionMarkerSeq = 0;
+
+const isProcessAlive = (pid: number): boolean => {
+	try {
+		process.kill(pid, 0); // signal 0 only checks that the process exists
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === "EPERM"; // exists, owned by someone else
+	}
+};
+
+/** Open omp sessions across all processes; markers left by crashed processes are removed. */
+const countOpenSessions = (): number => {
+	let names: string[];
+	try {
+		names = readdirSync(SESSIONS_DIR);
+	} catch {
+		return 0;
+	}
+	let count = 0;
+	for (const name of names) {
+		const pid = Number(name.split("-")[0]);
+		if (Number.isInteger(pid) && pid > 0 && isProcessAlive(pid)) count++;
+		else rmSync(join(SESSIONS_DIR, name), { force: true });
+	}
+	return count;
 };
 
 /** "plan mode + goal mode (paused)"; the goal objective and plan path stay private. */
@@ -398,9 +442,13 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let agentRunning = false;
 	let modes = ""; // formatted active omp modes, see formatModes
 	let stateWatcher: FSWatcher | undefined;
+	let sessionsWatcher: FSWatcher | undefined;
+	let sessionMarker: string | undefined;
+	let openSessions = 1;
+	let sessionStartedAt = Date.now();
 	let shuttingDown = false;
 	const initial = readGlobalState();
-	let { enabled, hiddenProjects, awayMinutes, autoHidePrivate } = initial;
+	let { enabled, hiddenProjects, awayMinutes, autoHidePrivate, timer } = initial;
 	// Display settings in force for cwd: global values with this project's overrides applied.
 	let { showContext, showModel, showButton, showBranch } = effectiveSettings(initial, process.cwd());
 	let projectOverrides: ProjectOverrides = {};
@@ -463,9 +511,12 @@ export default function discordPresence(pi: ExtensionAPI) {
 		return {
 			details: truncateDiscordText(`omp v${VERSION} · ${project}${branchSuffix}${modes ? ` · ${modes}` : ""}`),
 			state: truncateDiscordText(state),
-			startTimestamp: new Date(presence.startedAt),
+			// Per prompt: presence.startedAt resets on every agent_start. Per session: fixed at session_start.
+			startTimestamp: new Date(timer === "session" ? sessionStartedAt : presence.startedAt),
 			largeImageKey,
-			largeImageText: largeImageKey ? `oh-my-pi coding agent v${VERSION}` : undefined,
+			largeImageText: largeImageKey
+				? `oh-my-pi v${VERSION} · ${openSessions} session${openSessions === 1 ? "" : "s"} open`
+				: undefined,
 			// The logo names the model's maker, so it follows the model setting.
 			smallImageKey: showModel ? iconKey : undefined,
 			smallImageText: showModel && iconKey ? modelInfo : undefined,
@@ -576,10 +627,12 @@ export default function discordPresence(pi: ExtensionAPI) {
 			showModel !== effective.showModel ||
 			showButton !== effective.showButton ||
 			autoHidePrivate !== next.autoHidePrivate ||
-			showBranch !== effective.showBranch;
+			showBranch !== effective.showBranch ||
+			timer !== next.timer;
 		if (effective.showBranch && !showBranch) branch = await readGitBranch(cwd); // read before the flush below
 		({ showContext, showModel, showButton, showBranch } = effective);
 		autoHidePrivate = next.autoHidePrivate;
+		timer = next.timer;
 		if (awayMinutes !== next.awayMinutes) {
 			awayMinutes = next.awayMinutes;
 			armAwayTimer();
@@ -600,6 +653,21 @@ export default function discordPresence(pi: ExtensionAPI) {
 			startedAt: Date.now(),
 		});
 		await connect();
+	};
+
+	/** Adds this session's marker and follows the others, so the hover text shows how many sessions are open. */
+	const registerSession = () => {
+		mkdirSync(SESSIONS_DIR, { recursive: true });
+		sessionMarker = join(SESSIONS_DIR, `${process.pid}-${++sessionMarkerSeq}`);
+		writeFileSync(sessionMarker, "");
+		openSessions = countOpenSessions();
+		sessionsWatcher = watch(SESSIONS_DIR, { persistent: false }, () => {
+			const count = countOpenSessions();
+			if (count === openSessions) return;
+			openSessions = count;
+			schedulePresenceUpdate();
+		});
+		sessionsWatcher.on("error", () => {}); // the directory can vanish; the count just stops updating
 	};
 
 	const watchGlobalState = () => {
@@ -658,6 +726,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			"",
 			`Project: ${normalizeProjectName(cwd)} · ${isProjectHidden(cwd, hiddenProjects) ? "hidden" : autoHidden() ? `hidden automatically (${"reason" in repo ? repo.reason : ""})` : "visible"} · branch ${showBranch ? (branch ?? "none (not a git repo)") : "hidden"}`,
 			`Context: ${showContext ? "shown" : "hidden"}${context === undefined ? "" : ` (now ${context}%)`} · ${away}`,
+			`Timer: since ${timer === "session" ? "the session started" : "the latest prompt"} · ${openSessions} omp session${openSessions === 1 ? "" : "s"} open`,
 			`Project overrides: ${
 				Object.entries(projectOverrides)
 					.map(([setting, on]) => `${SETTING_LABELS[setting as ProjectSetting][0]} ${on ? "shown" : "hidden"}`)
@@ -770,6 +839,12 @@ export default function discordPresence(pi: ExtensionAPI) {
 						run: async () => void (await applyGlobalState(writeGlobalState({ [setting]: !state[setting] }))),
 					})),
 					{
+						label: `Timer: since ${state.timer === "session" ? "session start" : "latest prompt"}`,
+						description: "What the elapsed time on Discord counts from",
+						run: async () =>
+							void (await applyGlobalState(writeGlobalState({ timer: state.timer === "session" ? "prompt" : "session" }))),
+					},
+					{
 						label: `Away after: ${describeAway(state.awayMinutes)}`,
 						description: "Idle time before the status turns away",
 						run: async () => {
@@ -876,7 +951,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		cwd = ctx.cwd;
 		watchGlobalState();
 		const state = readGlobalState();
-		({ enabled, hiddenProjects, awayMinutes, autoHidePrivate } = state);
+		({ enabled, hiddenProjects, awayMinutes, autoHidePrivate, timer } = state);
 		({ showContext, showModel, showButton, showBranch } = effectiveSettings(state, cwd));
 		const key = projectKeyFor(cwd, state.projects);
 		projectOverrides = key ? state.projects[key]! : {};
@@ -886,6 +961,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 			contextPercent: readContextPercent(ctx),
 			startedAt: Date.now(),
 		});
+		if (!sessionMarker) {
+			sessionStartedAt = Date.now();
+			registerSession();
+		}
 		// Discord hides the small (brand) image without a large one; default to the app's own icon.
 		if (!app.name) void fetchAppInfo().then((info) => {
 			app = info;
@@ -1020,6 +1099,10 @@ export default function discordPresence(pi: ExtensionAPI) {
 		clearTimeout(awayTimer);
 		stateWatcher?.close();
 		stateWatcher = undefined;
+		sessionsWatcher?.close();
+		sessionsWatcher = undefined;
+		if (sessionMarker) rmSync(sessionMarker, { force: true });
+		sessionMarker = undefined;
 		await clearDiscordPresence();
 		if (wslBridge) {
 			wslBridge.close();

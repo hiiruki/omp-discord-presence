@@ -13,7 +13,14 @@ export const githubRepos = new Map<string, number>();
 /** Art Asset keys the fake Discord application has uploaded. */
 export const uploadedAssets = new Set<string>();
 
-export type Activity = { details?: string; state?: string; party?: { size?: number[] }; buttons?: unknown[]; assets?: Record<string, string> };
+export type Activity = {
+	details?: string;
+	state?: string;
+	timestamps?: { start?: number };
+	party?: { size?: number[] };
+	buttons?: unknown[];
+	assets?: Record<string, string>;
+};
 /** Every SET_ACTIVITY in arrival order; `null` is a cleared activity. */
 export const activities: (Activity | null)[] = [];
 
@@ -26,7 +33,8 @@ export const stubNetwork = () => {
 		const url = String(input instanceof Request ? input.url : input);
 		const repo = /api\.github\.com\/repos\/(.+)$/.exec(url)?.[1];
 		if (repo) return json({}, githubRepos.get(repo) ?? 200);
-		if (/discord\.com\/api\/v10\/applications\/\d+\/rpc$/.test(url)) return json({ name: "OH MY PI", icon: null });
+		// An icon makes the extension send a large image, which carries the hover text.
+		if (/discord\.com\/api\/v10\/applications\/\d+\/rpc$/.test(url)) return json({ name: "OH MY PI", icon: "abc123" });
 		if (/discord\.com\/api\/v10\/oauth2\/applications\/\d+\/assets$/.test(url)) {
 			return json([...uploadedAssets].map((name) => ({ name })));
 		}

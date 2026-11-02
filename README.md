@@ -17,6 +17,7 @@ using tool · bash · anthropic/claude-opus-4 · effort: high
 
 - **Live status:** idle, thinking, using a tool, waiting for you (approval, `ask`, plan review), compacting context, retrying, and away after a quiet period.
 - **Session details:** omp version, project name, active omp modes (plan, goal, loop, vibe), and the model with its effort. A model or effort switch shows within seconds, even without a prompt.
+- **Elapsed timer** since the latest prompt or since the session started (your choice), and a hover on the omp icon showing how many omp sessions are open.
 - **Model logo:** the model maker's logo as a small badge, from [lobe-icons](https://github.com/lobehub/lobe-icons) (156 logos, matched on the model id first, then the provider).
 - **GitHub button:** **View on GitHub** for public repos.
 - **Subagents as a party:** running task/eval subagents show as `(3 of 4)`.
@@ -34,6 +35,10 @@ using tool · bash · anthropic/claude-opus-4 · effort: high
 ## What Discord shows
 
 Status changes reach Discord within about 4 seconds. Updates are spaced out because Discord accepts only 5 activity updates per 20 seconds, and the latest state is always sent last. While tools run in parallel, the status stays on "using tool" until the last one finishes. Automatic context compaction and provider retries get their own status (`compacting context`, `retrying · attempt 2/5`). The retry's error message is never shown. The model and effort follow the selection in the omp session: a switch (`/model`, the model picker, ⇧⇥ for effort) shows within a few seconds, even without a prompt.
+
+The elapsed time on Discord counts from the latest prompt by default. Set **Timer** to *since session start* in `/discord-presence settings` to count from when the omp session opened instead.
+
+Hovering the large omp icon shows the omp version and how many omp sessions are open on this machine, e.g. `oh-my-pi v18.15.0 · 2 sessions open`. Every omp process counts. Each main session leaves a marker file in `discord-presence-sessions/` in omp's agent directory and removes it on exit. Markers left by a crashed process are dropped the next time the sessions are counted.
 
 Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
 
@@ -183,6 +188,7 @@ flowchart TD
         G["GitHub visibility<br/>public → button<br/>private → auto-hide"]
         BR["git branch<br/>(polled every 15 s while shown)"]
         A["app name + icon<br/>(Discord API)"]
+        OS["open omp sessions<br/>(marker files, all processes)"]
     end
 
     E1 & E2 & E3 & E6 & E7 & E8 --> P
@@ -190,7 +196,7 @@ flowchart TD
     E4 -- "on / off / hide / show / settings" --> S
     S -- "file watcher<br/>(all sessions)" --> EF --> P
     P --> T --> RC -- "yes" --> B
-    V & M & L & G & BR & A --> B
+    V & M & L & G & BR & A & OS --> B
     B -- "SET_ACTIVITY<br/>details · state · logo · button · party" --> RPC["discord-rpc client"]
     RPC --> D["Discord desktop app"]
     E5 -- "clear activity, close bridge" --> RPC
@@ -311,6 +317,7 @@ Press Tab after `/discord-presence ` to pick a subcommand from a list with short
 │    GitHub button: shown                             │
 │    Git branch: hidden                               │
 │    Context usage: hidden                            │
+│    Timer: since latest prompt                       │
 │    Away after: 15 min                               │
 │    Done                                             │
 ╰─────────────────────────────────────────────────────╯
@@ -325,6 +332,7 @@ Press Tab after `/discord-presence ` to pick a subcommand from a list with short
 | GitHub button | shown | The **View on GitHub** button for public repos. |
 | Git branch | hidden | Append `@ <branch>` to the project name. git is only polled while this is on. |
 | Context usage | hidden | Append `context N%`. |
+| Timer | since latest prompt | What the elapsed time counts from: the latest prompt, or the session start. |
 | Away after | 15 min | Idle time before `away`: 5, 10, 15, 30 or 60 minutes, or never. |
 
 Every change is saved and applied live to all running sessions. Outside the TUI (print, RPC), `settings` points to the settings file instead.
@@ -369,6 +377,7 @@ Sent to Discord:
 
 Project: omp-discord-presence · visible · branch hidden
 Context: hidden (now 2%) · idle 10s, away in 14m 50s
+Timer: since the latest prompt · 2 omp sessions open
 Project overrides: none
 Settings: /home/me/.omp/agent/discord-presence-state.json
 ```
@@ -399,6 +408,7 @@ With `omp --profile <name>`, that is the profile's agent directory (`~/.omp/prof
   "showModel": true,
   "showButton": true,
   "awayMinutes": 15,
+  "timer": "prompt",
   "autoHidePrivate": true,
   "showBranch": false,
   "projects": {

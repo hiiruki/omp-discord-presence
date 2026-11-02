@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- **Timer** setting in `/discord-presence settings`: the elapsed time on Discord counts from the latest prompt (default, as before) or from when the omp session started.
+- Hovering the large omp icon now shows how many omp sessions are open, across all omp processes, e.g. `oh-my-pi v18.15.0 · 2 sessions open`. Sessions left behind by a crashed omp aren't counted.
+- `/discord-presence status` shows the timer setting and the open session count.
+
 ## [0.3.0] - 2026-11-02
 
 ### Added
