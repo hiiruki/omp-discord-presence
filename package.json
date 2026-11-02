@@ -48,7 +48,7 @@
     "@types/bun": "^1.4.4",
     "@types/discord-rpc": "^4.0.10",
     "@types/node": "^24.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260509.2",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "oxlint": "^1.63.0",
     "typescript": "^5.9.0"
   },
