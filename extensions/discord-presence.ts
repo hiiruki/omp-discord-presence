@@ -69,6 +69,8 @@ type GlobalState = {
 	showButton: boolean;
 	/** Minutes idle before the status turns "away"; 0 never. */
 	awayMinutes: number;
+	/** Show "private project" when origin is a private (or unverifiable) GitHub repo. */
+	autoHidePrivate: boolean;
 };
 
 const DEFAULT_STATE: GlobalState = {
@@ -78,6 +80,7 @@ const DEFAULT_STATE: GlobalState = {
 	showModel: true,
 	showButton: true,
 	awayMinutes: 15,
+	autoHidePrivate: true,
 };
 
 type DiscordRpcClient = DiscordRPC.Client & {
@@ -110,6 +113,7 @@ const readGlobalState = (): GlobalState => {
 			showContext: parsed.showContext === true,
 			showModel: parsed.showModel !== false,
 			showButton: parsed.showButton !== false,
+			autoHidePrivate: parsed.autoHidePrivate !== false,
 			awayMinutes:
 				typeof awayMinutes === "number" && Number.isFinite(awayMinutes) && awayMinutes >= 0
 					? awayMinutes
@@ -157,27 +161,39 @@ const execFileAsync = promisify(execFile);
 // Captures owner/repo from https, ssh and scp-style remotes; credentials before the host are never captured.
 const GITHUB_REMOTE = /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/;
 
-type RepoLookup = { url: string; slug: string } | { reason: string };
+/**
+ * `mayBePrivate`: origin is on GitHub but not publicly visible: a 404 (private, or deleted) or an
+ * unverifiable answer (offline, rate limit). Auto-hide fails closed on both so a private name never leaks.
+ */
+type RepoLookup = { url: string; slug: string } | { reason: string; mayBePrivate?: true };
 
-/** The public GitHub URL of cwd's `origin` remote, or why there is no button. */
+const LOOKUP_TIMEOUT_MS = 5_000;
+
+/** The public GitHub URL of cwd's `origin` remote, or why there is none. */
 const findPublicGithubRepo = async (cwd: string): Promise<RepoLookup> => {
 	let slug: string | undefined;
 	try {
-		const { stdout } = await execFileAsync("git", ["-C", cwd, "remote", "get-url", "origin"]);
+		const { stdout } = await execFileAsync("git", ["-C", cwd, "remote", "get-url", "origin"], {
+			timeout: LOOKUP_TIMEOUT_MS,
+		});
 		slug = GITHUB_REMOTE.exec(stdout.trim())?.[1];
 	} catch {
 		return { reason: "no git origin remote" };
 	}
+	// shortcut: ssh host aliases (git@github-work:owner/repo) aren't recognized; resolve them via `ssh -G` if users need it.
 	if (!slug) return { reason: "origin is not on GitHub" };
 	try {
 		// Only link public repos: a private repo's URL would leak its owner/name to everyone viewing the profile.
 		const response = await fetch(`https://api.github.com/repos/${slug}`, {
 			headers: { "User-Agent": "omp-discord-presence" },
+			signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
 		});
 		if (response.ok) return { url: `https://github.com/${slug}`, slug };
-		return { reason: response.status === 404 ? "repo is private or missing" : `GitHub API HTTP ${response.status}` };
+		return response.status === 404
+			? { reason: "private GitHub repo", mayBePrivate: true }
+			: { reason: `GitHub API HTTP ${response.status}, visibility unknown`, mayBePrivate: true };
 	} catch {
-		return { reason: "GitHub API unreachable" };
+		return { reason: "GitHub API unreachable, visibility unknown", mayBePrivate: true };
 	}
 };
 
@@ -250,6 +266,8 @@ const startWslBridge = async (): Promise<Server | undefined> => {
 };
 
 const USAGE = "usage: /discord-presence [settings|status|on|off|refresh|hide|show|context on|context off]";
+const SHOW_PRIVATE_HINT =
+	"this project is hidden because its GitHub repo is private (or its visibility can't be checked); turn off \"Auto-hide private repos\" in /discord-presence settings to show it.";
 
 // Subagent sessions run in this process with rebound copies of this factory, so they share this module.
 // Each one reports while its agent loop runs (nested subagents included); the main session displays the total.
@@ -279,6 +297,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let reconnectTimer: NodeJS.Timeout | undefined;
 	let app: { name?: string; iconUrl?: string } = {};
 	let repo: RepoLookup = { reason: "not checked yet" };
+	// Flushes wait for the repo check, so a private repo's name is never sent before it is known to be private.
+	let repoCheck: Promise<unknown> = Promise.resolve();
 	let lastActivity: DiscordRPC.Presence | undefined;
 	let idleSince: number | undefined;
 	let wslBridge: Server | undefined;
@@ -292,7 +312,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let modes = ""; // formatted active omp modes, see formatModes
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
-	let { enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes } = readGlobalState();
+	let { enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes, autoHidePrivate } = readGlobalState();
 	let cwd = process.cwd();
 
 	let presence: PresenceState = {
@@ -300,7 +320,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 		startedAt: Date.now(),
 	};
 
-	const projectHidden = () => isProjectHidden(cwd, hiddenProjects);
+	const autoHidden = () => autoHidePrivate && "mayBePrivate" in repo && repo.mayBePrivate === true;
+	const projectHidden = () => isProjectHidden(cwd, hiddenProjects) || autoHidden();
 
 	const clearReconnectTimer = () => {
 		if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -356,6 +377,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 
 	const flushPresence = async () => {
 		clearUpdateTimer();
+		await repoCheck;
 		if (!connected || !rpc || !enabled || shuttingDown) return;
 
 		try {
@@ -453,8 +475,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 		const wasHidden = projectHidden();
 		hiddenProjects = next.hiddenProjects;
 		const displayChanged =
-			showContext !== next.showContext || showModel !== next.showModel || showButton !== next.showButton;
-		({ showContext, showModel, showButton } = next);
+			showContext !== next.showContext ||
+			showModel !== next.showModel ||
+			showButton !== next.showButton ||
+			autoHidePrivate !== next.autoHidePrivate;
+		({ showContext, showModel, showButton, autoHidePrivate } = next);
 		if (awayMinutes !== next.awayMinutes) {
 			awayMinutes = next.awayMinutes;
 			armAwayTimer();
@@ -531,7 +556,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			`  button: ${button}`,
 			lastActivity ? `  last update ${formatDuration(Date.now() - lastFlushAt)} ago` : "",
 			"",
-			`Project: ${normalizeProjectName(cwd)} · ${hidden ? "hidden" : "visible"}`,
+			`Project: ${normalizeProjectName(cwd)} · ${isProjectHidden(cwd, hiddenProjects) ? "hidden" : autoHidden() ? `hidden automatically (${"reason" in repo ? repo.reason : ""})` : "visible"}`,
 			`Context: ${showContext ? "shown" : "hidden"}${context === undefined ? "" : ` (now ${context}%)`} · ${away}`,
 			`Settings: ${GLOBAL_STATE_FILE}`,
 		]
@@ -560,8 +585,12 @@ export default function discordPresence(pi: ExtensionAPI) {
 			const items = [
 				{ label: `Presence: ${toggle(state.enabled, "on", "off")}`, description: "Show omp activity on Discord (all sessions)" },
 				{
-					label: `This project: ${toggle(!hidden, "visible", "hidden")}`,
+					label: `This project: ${hidden ? "hidden" : autoHidden() ? "hidden (private repo)" : "visible"}`,
 					description: `Show "${normalizeProjectName(ctx.cwd)}" or "${PRIVATE_PROJECT_LABEL}"`,
+				},
+				{
+					label: `Auto-hide private repos: ${toggle(state.autoHidePrivate, "on", "off")}`,
+					description: `"${PRIVATE_PROJECT_LABEL}" when origin is a private GitHub repo`,
 				},
 				{ label: `Model, effort & logo: ${toggle(state.showModel)}`, description: "e.g. anthropic/claude-opus · effort: high" },
 				{ label: `GitHub button: ${toggle(state.showButton)}`, description: "View on GitHub, public repos only" },
@@ -577,10 +606,13 @@ export default function discordPresence(pi: ExtensionAPI) {
 			if (index === -1 || index === items.length - 1) return;
 
 			if (index === 0) await applyGlobalState(writeGlobalState({ enabled: !state.enabled }));
-			else if (index === 1) await setProjectHidden(ctx.cwd, !hidden);
-			else if (index === 2) await applyGlobalState(writeGlobalState({ showModel: !state.showModel }));
-			else if (index === 3) await applyGlobalState(writeGlobalState({ showButton: !state.showButton }));
-			else if (index === 4) await applyGlobalState(writeGlobalState({ showContext: !state.showContext }));
+			else if (index === 1) {
+				if (!hidden && autoHidden()) ctx.ui.notify(SHOW_PRIVATE_HINT, "warning");
+				else await setProjectHidden(ctx.cwd, !hidden);
+			} else if (index === 2) await applyGlobalState(writeGlobalState({ autoHidePrivate: !state.autoHidePrivate }));
+			else if (index === 3) await applyGlobalState(writeGlobalState({ showModel: !state.showModel }));
+			else if (index === 4) await applyGlobalState(writeGlobalState({ showButton: !state.showButton }));
+			else if (index === 5) await applyGlobalState(writeGlobalState({ showContext: !state.showContext }));
 			else {
 				const labels = AWAY_CHOICES.map((minutes) => describeAway(minutes) + (minutes === DEFAULT_STATE.awayMinutes ? " (default)" : ""));
 				const picked = await ctx.ui.select("Away after", labels, {
@@ -614,7 +646,8 @@ export default function discordPresence(pi: ExtensionAPI) {
 				case "show":
 				case "public":
 					await setProjectHidden(ctx.cwd, false);
-					ctx.ui.notify(`project name "${normalizeProjectName(ctx.cwd)}" visible on discord.`, "info");
+					if (autoHidden()) ctx.ui.notify(SHOW_PRIVATE_HINT, "warning");
+					else ctx.ui.notify(`project name "${normalizeProjectName(ctx.cwd)}" visible on discord.`, "info");
 					return;
 				case "settings":
 					if (!ctx.hasUI) {
@@ -656,7 +689,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		shuttingDown = false;
 		cwd = ctx.cwd;
 		watchGlobalState();
-		({ enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes } = readGlobalState());
+		({ enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes, autoHidePrivate } = readGlobalState());
 		updatePresence({
 			status: "idle",
 			model: ctx.model,
@@ -679,9 +712,9 @@ export default function discordPresence(pi: ExtensionAPI) {
 			updatePresence({ model });
 		}, MODEL_POLL_MS);
 		repo = { reason: "checking GitHub" };
-		void findPublicGithubRepo(ctx.cwd).then((lookup) => {
+		repoCheck = findPublicGithubRepo(ctx.cwd).then((lookup) => {
 			repo = lookup;
-			if ("url" in lookup) schedulePresenceUpdate();
+			schedulePresenceUpdate();
 		});
 		if (enabled) void connect();
 	});

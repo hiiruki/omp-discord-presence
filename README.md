@@ -37,6 +37,15 @@ When the project is a git repository whose `origin` remote points to a **public*
 - **Hidden projects:** `/discord-presence hide` removes the button too.
 - **Your own view:** Discord never shows your own activity buttons to you. Other people see them on your profile.
 
+### Private repos are hidden automatically
+
+When `origin` points to a **private** GitHub repo, the project name is replaced with `private project` on its own; no `/discord-presence hide` needed. The button is left out too. It works from the same anonymous GitHub check:
+
+- **Fails closed:** if the visibility can't be checked (offline, GitHub rate limit), the project is hidden too.
+- **No early leak:** nothing is sent to Discord until the check finishes, at most 5 seconds.
+- **Not covered:** origins that aren't recognizably GitHub, such as SSH host aliases like `git@github-work:owner/repo` or GitHub Enterprise hosts. Hide those with `/discord-presence hide`.
+- **To show a private repo's name anyway:** turn off **Auto-hide private repos** in `/discord-presence settings`. `/discord-presence show` says so when a project is auto-hidden.
+
 Works out of the box on Windows, macOS, Linux and WSL. No Discord setup, relay, or `socat` needed on the user's side.
 
 ## Requirements
@@ -217,6 +226,7 @@ Inside omp:
 │  ❯ Presence: on                                     │
 │      Show omp activity on Discord (all sessions)    │
 │    This project: visible                            │
+│    Auto-hide private repos: on                      │
 │    Model, effort & logo: shown                      │
 │    GitHub button: shown                             │
 │    Context usage: hidden                            │
@@ -228,7 +238,8 @@ Inside omp:
 | Setting | Default | Effect |
 | --- | --- | --- |
 | Presence | on | Show omp activity on Discord, for every session. |
-| This project | visible | Show the folder name, or `private project` (same as `hide` / `show`). |
+| This project | visible | Show the folder name, or `private project` (same as `hide` / `show`). Shows `hidden (private repo)` when auto-hidden. |
+| Auto-hide private repos | on | `private project` when `origin` is a private GitHub repo, or its visibility can't be checked. |
 | Model, effort & logo | shown | When hidden, the model, its effort and the model logo are left out; the logo would reveal the model's maker. |
 | GitHub button | shown | The **View on GitHub** button for public repos. |
 | Context usage | hidden | Append `context N%`. |
@@ -279,7 +290,8 @@ All settings and the hidden project list are global across omp projects and sess
   "showContext": false,
   "showModel": true,
   "showButton": true,
-  "awayMinutes": 15
+  "awayMinutes": 15,
+  "autoHidePrivate": true
 }
 ```
 
