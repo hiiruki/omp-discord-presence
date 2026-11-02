@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- **Smaller package:** the npm package is about 60% smaller (1.9 MB → 0.8 MB). The logo images are no longer shipped; the README's logo tables load them from GitHub.
+
 ## [0.4.0] - 2026-11-02
 
 ### Added

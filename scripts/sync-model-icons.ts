@@ -126,9 +126,11 @@ const keywordsByIcon = (rules: Rule[]) => {
 	return byIcon;
 };
 const cell = (keywords: string[]) => keywords.map((keyword) => `\`${keyword.replaceAll("|", "\\|")}\``).join(", ");
+// Absolute URLs: the PNGs aren't in the npm package, so relative paths would break the tables on npmjs.com.
+const LOGO_BASE_URL = "https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models";
 const logo = (icon: string) => {
 	const key = shipped.get(icon);
-	return key ? `<img src="assets/models/${key}.png" width="20" height="20" alt="">` : "";
+	return key ? `<img src="${LOGO_BASE_URL}/${key}.png" width="20" height="20" alt="">` : "";
 };
 const table = (rules: Rule[], header: string) => {
 	const rows = [...keywordsByIcon(rules)].map(

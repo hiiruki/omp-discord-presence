@@ -29,7 +29,6 @@
   "files": [
     "extensions",
     "bin",
-    "assets",
     "CHANGELOG.md"
   ],
   "scripts": {

@@ -10,7 +10,7 @@ An omp (oh-my-pi) extension that shows the omp session as Discord Rich Presence.
 | --- | --- | --- |
 | `extensions/discord-presence.ts` | the whole extension (default export = omp factory; named exports are test seams) | yes |
 | `extensions/model-icons.generated.ts` | lobe-icons model/provider logo rules | no, `pnpm sync-icons` |
-| `assets/models/*.png` | logos, uploaded as Discord Art Assets | no, `pnpm sync-icons` |
+| `assets/models/*.png` | logos, uploaded as Discord Art Assets; repo only, not in the npm package (the README links them on GitHub) | no, `pnpm sync-icons` |
 | `scripts/sync-model-icons.ts` | regenerates the two above and the README logo tables | yes |
 | `bin/npiperelay.exe` | vendored WSL→Windows pipe relay (MIT, v0.1.0) | no |
 | `test/` | bun:test suite, fake Discord, fake omp session | yes |
@@ -76,6 +76,7 @@ pnpm sync-icons                            # after bumping lobe-icons or @oh-my-
   | `ci` | workflows, Dependabot config |
   | `test` | tests only |
   | `refactor` | no behaviour change |
+  | `perf` | faster or smaller, same behaviour |
   | `chore(deps)` | dependency updates |
   | `chore(release): x.y.z` | version bump + changelog heading |
 

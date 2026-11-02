@@ -1,8 +1,8 @@
 # omp-discord-presence
 
-[![npm](https://img.shields.io/npm/v/omp-discord-presence)](https://www.npmjs.com/package/omp-discord-presence) [![license](https://img.shields.io/npm/l/omp-discord-presence)](LICENSE)
+[![npm](https://img.shields.io/npm/v/omp-discord-presence)](https://www.npmjs.com/package/omp-discord-presence) [![license](https://img.shields.io/npm/l/omp-discord-presence)](https://github.com/hiiruki/omp-discord-presence/blob/main/LICENSE)
 
-Discord Rich Presence extension for omp (oh-my-pi) coding agent. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+Discord Rich Presence extension for omp (oh-my-pi) coding agent. See [CHANGELOG.md](https://github.com/hiiruki/omp-discord-presence/blob/main/CHANGELOG.md) for what changed in each release.
 
 Discord shows the installed omp version, the project name, any active omp mode (plan, goal, loop, vibe), the current state (idle / thinking / using tool), the active tool, the model and its effort (thinking level), with the model maker's logo as a small badge:
 
@@ -425,7 +425,7 @@ With `omp --profile <name>`, that is the profile's agent directory (`~/.omp/prof
 
 ## Development
 
-The development and release conventions are in [AGENTS.md](AGENTS.md): tooling, code rules, tests, commit format, changelog, versioning and the release steps. omp and other coding agents load it automatically.
+The development and release conventions are in [AGENTS.md](https://github.com/hiiruki/omp-discord-presence/blob/main/AGENTS.md): tooling, code rules, tests, commit format, changelog, versioning and the release steps. omp and other coding agents load it automatically.
 
 ```bash
 pnpm install
@@ -476,7 +476,7 @@ Releases are published by GitHub Actions (`.github/workflows/release.yml`) when 
 
 The `npm` environment is created in the GitHub repo on the first run. Add required reviewers to it under **Settings → Environments** if releases should wait for approval. Publishing by hand still works with `npm publish`.
 
-The package ships only `extensions/`, `bin/`, `assets/` and `CHANGELOG.md` (plus `README.md`, `LICENSE` and `package.json`, which npm always includes), about 1.9 MB. `@oh-my-pi/pi-coding-agent` and `@oh-my-pi/pi-utils` are optional peers resolved from the running omp, so installing the plugin doesn't pull a second copy of omp.
+The package ships only `extensions/`, `bin/` and `CHANGELOG.md` (plus `README.md`, `LICENSE` and `package.json`, which npm always includes), about 0.8 MB. The logo PNGs in `assets/models/` stay in the repo: they're only needed to upload Art Assets, and the README links to them on GitHub. `@oh-my-pi/pi-coding-agent` and `@oh-my-pi/pi-utils` are optional peers resolved from the running omp, so installing the plugin doesn't pull a second copy of omp.
 
 Changes to the Discord application (name, icon, Art Assets) reach every user immediately, with no release. New logo rules in `extensions/model-icons.generated.ts` still need a release.
 
@@ -510,190 +510,190 @@ The logos live in `assets/models/` (PNGs from [`@lobehub/icons-static-png`](http
 
 | Logo | Key | Model id contains | omp catalog models |
 | --- | --- | --- | --- |
-| <img src="assets/models/openai.png" width="20" height="20" alt=""> | `openai` | `gpt-3`, `gpt-4`, `gpt-5`, `gpt-oss`, `o1-`, `^o1`, `/o1`, `o3-`, `^o3`, `/o3`, `o4-`, `^o4`, `/o4`, `text-embedding-`, `tts-`, `whisper-`, `codex`, `davinci`, `babbage`, `omni-moderation`, `text-moderation`, `text-adb`, `text-ada`, `computer-use`, `^gpt-`, `/gpt-`, `openai` | 879 |
-| <img src="assets/models/sora.png" width="20" height="20" alt=""> | `sora` | `sora` | 1 |
-| <img src="assets/models/dalle.png" width="20" height="20" alt=""> | `dalle` | `dalle`, `dall-e` | 0 |
-| <img src="assets/models/glmv.png" width="20" height="20" alt=""> | `glmv` | `^glm-(.*)v`, `/glm-(.*)v`, `-glm-(.*)v` | 41 |
-| <img src="assets/models/zai.png" width="20" height="20" alt=""> | `zai` | `^glm-5`, `/glm-5`, `/glm5`, `-glm-4`, `^glm-4`, `/glm-4`, `/glm4`, `-glm-5` | 316 |
-| <img src="assets/models/chatglm.png" width="20" height="20" alt=""> | `chatglm` | `^glm-`, `/glm-`, `chatglm`, `-glm-` | 12 |
-| <img src="assets/models/codegeex.png" width="20" height="20" alt=""> | `codegeex` | `^codegeex`, `/codegeex` | 0 |
-| <img src="assets/models/claude.png" width="20" height="20" alt=""> | `claude` | `claude` | 550 |
-| <img src="assets/models/anthropic.png" width="20" height="20" alt=""> | `anthropic` | `anthropic` | 0 |
-| <img src="assets/models/aws.png" width="20" height="20" alt=""> | `aws` | `titan` | 0 |
-| <img src="assets/models/fireworks.png" width="20" height="20" alt=""> | `fireworks` | `accounts/fireworks/models/fire` | 0 |
-| <img src="assets/models/internlm.png" width="20" height="20" alt=""> | `internlm` | `internlm`, `internvl` | 1 |
-| <img src="assets/models/nousresearch.png" width="20" height="20" alt=""> | `nousresearch` | `deephermes`, `hermes`, `genstruct`, `minos` | 19 |
-| <img src="assets/models/nvidia.png" width="20" height="20" alt=""> | `nvidia` | `nemotron`, `openreasoning`, `nemoretriever`, `neva-`, `nv-` | 170 |
-| <img src="assets/models/meta.png" width="20" height="20" alt=""> | `meta` | `llama`, `/l3` | 193 |
-| <img src="assets/models/llava.png" width="20" height="20" alt=""> | `llava` | `llava` | 0 |
-| <img src="assets/models/nanobanana.png" width="20" height="20" alt=""> | `nanobanana` | `gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`, `gemini-\d+(?:\.\d+)?-(?:flash(?:-lite)?\|pro)-image(?:-preview)?(?::\|$)`, `nanobanana`, `nano-banana` | 27 |
-| <img src="assets/models/gemini.png" width="20" height="20" alt=""> | `gemini` | `gemini` | 277 |
-| <img src="assets/models/deepmind.png" width="20" height="20" alt=""> | `deepmind` | `^imagen-`, `/imagen-`, `^imagen\d/`, `/imagen\d` | 0 |
-| <img src="assets/models/gemma.png" width="20" height="20" alt=""> | `gemma` | `gemma` | 197 |
-| <img src="assets/models/moonshot.png" width="20" height="20" alt=""> | `moonshot` | `kimi`, `moonshot` | 189 |
-| <img src="assets/models/qiniu.png" width="20" height="20" alt=""> | `qiniu` | `qiniu` | 0 |
-| <img src="assets/models/qwen.png" width="20" height="20" alt=""> | `qwen` | `qwen`, `qwq`, `qvq`, `wanx`, `wan\d/`, `wan\d\.\d-`, `tongyi`, `gte-rerank` | 657 |
-| <img src="assets/models/minimax.png" width="20" height="20" alt=""> | `minimax` | `minimax`, `abab`, `^image-` | 186 |
-| <img src="assets/models/mistral.png" width="20" height="20" alt=""> | `mistral` | `mistral`, `mixtral`, `codestral`, `mathstral`, `/mn-`, `pixtral`, `ministral`, `magistral`, `devstral`, `voxtral` | 213 |
-| <img src="assets/models/perplexity.png" width="20" height="20" alt=""> | `perplexity` | `pplx`, `sonar` | 21 |
-| <img src="assets/models/yi.png" width="20" height="20" alt=""> | `yi` | `^yi-`, `/yi-`, `-yi-` | 4 |
-| <img src="assets/models/openrouter.png" width="20" height="20" alt=""> | `openrouter` | `^openrouter` | 19 |
-| <img src="assets/models/relace.png" width="20" height="20" alt=""> | `relace` | `^relace-`, `/relace-` | 3 |
-| <img src="assets/models/arcee.png" width="20" height="20" alt=""> | `arcee` | `^trinity-`, `/trinity-`, `afm-4.5b`, `caller-large`, `spotlight`, `maestro-reasoning`, `virtuoso-medium-v2`, `virtuoso-large`, `coder-large`, `arcee-blitz` | 23 |
-| <img src="assets/models/essentialai.png" width="20" height="20" alt=""> | `essentialai` | `^rnj-`, `/rnj-` | 5 |
-| <img src="assets/models/deepcogito.png" width="20" height="20" alt=""> | `deepcogito` | `^deepcogito-`, `/deepcogito-`, `^cogito-`, `/cogito-` | 3 |
-| <img src="assets/models/morph.png" width="20" height="20" alt=""> | `morph` | `^morph-`, `/morph-` | 3 |
-| <img src="assets/models/ai2.png" width="20" height="20" alt=""> | `ai2` | `^olmo-`, `/olmo-` | 10 |
-| <img src="assets/models/inception.png" width="20" height="20" alt=""> | `inception` | `^mercury`, `/mercury` | 28 |
-| <img src="assets/models/openchat.png" width="20" height="20" alt=""> | `openchat` | `^openchat` | 0 |
-| <img src="assets/models/aya.png" width="20" height="20" alt=""> | `aya` | `aya` | 0 |
-| <img src="assets/models/cohere.png" width="20" height="20" alt=""> | `cohere` | `command` | 16 |
-| <img src="assets/models/dbrx.png" width="20" height="20" alt=""> | `dbrx` | `dbrx` | 1 |
-| <img src="assets/models/stepfun.png" width="20" height="20" alt=""> | `stepfun` | `step` | 47 |
-| <img src="assets/models/aimass.png" width="20" height="20" alt=""> | `aimass` | `taichu` | 0 |
-| <img src="assets/models/ai360.png" width="20" height="20" alt=""> | `ai360` | `360gpt`, `360zhinao` | 0 |
-| <img src="assets/models/baichuan.png" width="20" height="20" alt=""> | `baichuan` | `baichuan` | 4 |
-| <img src="assets/models/rwkv.png" width="20" height="20" alt=""> | `rwkv` | `rwkv`, `/eagle-` | 0 |
-| <img src="assets/models/wenxin.png" width="20" height="20" alt=""> | `wenxin` | `ernie`, `irag` | 35 |
-| <img src="assets/models/jina.png" width="20" height="20" alt=""> | `jina` | `^jina`, `/jina` | 1 |
-| <img src="assets/models/jimeng.png" width="20" height="20" alt=""> | `jimeng` | `^jimeng-`, `/jimeng-`, `seedream`, `seededit`, `seedance-` | 21 |
-| <img src="assets/models/doubao.png" width="20" height="20" alt=""> | `doubao` | `^ep-`, `doubao-` | 32 |
-| <img src="assets/models/kling.png" width="20" height="20" alt=""> | `kling` | `^kling`, `kling-`, `klingai` | 19 |
-| <img src="assets/models/hunyuan.png" width="20" height="20" alt=""> | `hunyuan` | `hunyuan`, `hy3`, `hy4` | 37 |
-| <img src="assets/models/fishaudio.png" width="20" height="20" alt=""> | `fishaudio` | `^d_`, `^g_`, `^wd_` | 0 |
-| <img src="assets/models/bytedance.png" width="20" height="20" alt=""> | `bytedance` | `skylark`, `seed-`, `bytedance` | 34 |
-| <img src="assets/models/burncloud.png" width="20" height="20" alt=""> | `burncloud` | `burncloud` | 0 |
-| <img src="assets/models/stability.png" width="20" height="20" alt=""> | `stability` | `stable-diffusion`, `stable-video`, `stable-cascade`, `sdxl`, `stablelm`, `^stable-`, `^sd3`, `^sd2`, `^sd1` | 2 |
-| <img src="assets/models/flux.png" width="20" height="20" alt=""> | `flux` | `flux` | 12 |
-| <img src="assets/models/suno.png" width="20" height="20" alt=""> | `suno` | `suno` | 0 |
-| <img src="assets/models/microsoft.png" width="20" height="20" alt=""> | `microsoft` | `wizardlm`, `/phi-`, `^phi-`, `-phi-`, `mai-`, `microsoft` | 31 |
-| <img src="assets/models/adobe.png" width="20" height="20" alt=""> | `adobe` | `firefly` | 0 |
-| <img src="assets/models/ai21.png" width="20" height="20" alt=""> | `ai21` | `jamba`, `^j2-`, `ai21` | 9 |
-| <img src="assets/models/upstage.png" width="20" height="20" alt=""> | `upstage` | `^solar-`, `/solar` | 17 |
-| <img src="assets/models/palm.png" width="20" height="20" alt=""> | `palm` | `palm` | 11 |
-| <img src="assets/models/sensenova.png" width="20" height="20" alt=""> | `sensenova` | `SenseChat`, `SenseNova` | 0 |
-| <img src="assets/models/grok.png" width="20" height="20" alt=""> | `grok` | `^grok-`, `/grok-` | 212 |
-| <img src="assets/models/ideogram.png" width="20" height="20" alt=""> | `ideogram` | `ideogram`, `^v_1`, `^v_2`, `^v3$`, `^upscale$`, `^describe$` | 0 |
-| <img src="assets/models/muse.png" width="20" height="20" alt=""> | `muse` | `(^\|/)muse-(spark\|wonder\|image\|video)($\|-)` | 75 |
-| <img src="assets/models/spark.png" width="20" height="20" alt=""> | `spark` | `spark`, `general$`, `generalv3$`, `generalv3.5$`, `4.0ultra$`, `pro-128k$`, `^max-32k$`, `^lite$`, `^x1$` | 2 |
-| <img src="assets/models/udio.png" width="20" height="20" alt=""> | `udio` | `udio` | 5 |
-| <img src="assets/models/unionalpha.png" width="20" height="20" alt=""> | `unionalpha` | `union-alpha`, `unionalpha`, `pareto` | 15 |
-| <img src="assets/models/deepseek.png" width="20" height="20" alt=""> | `deepseek` | `deepseek` | 281 |
-| <img src="assets/models/voyage.png" width="20" height="20" alt=""> | `voyage` | `voyage` | 16 |
-| <img src="assets/models/assemblyai.png" width="20" height="20" alt=""> | `assemblyai` | `assemblyai` | 0 |
-| <img src="assets/models/liquid.png" width="20" height="20" alt=""> | `liquid` | `liquid`, `lfm` | 19 |
-| <img src="assets/models/inflection.png" width="20" height="20" alt=""> | `inflection` | `inflection-` | 4 |
-| <img src="assets/models/aionlabs.png" width="20" height="20" alt=""> | `aionlabs` | `aion-` | 26 |
-| <img src="assets/models/aihubmix.png" width="20" height="20" alt=""> | `aihubmix` | `aihubmix` | 0 |
-| <img src="assets/models/v0.png" width="20" height="20" alt=""> | `v0` | `^v0-` | 3 |
-| <img src="assets/models/vertexai.png" width="20" height="20" alt=""> | `vertexai` | `^veo-`, `/veo-`, `^veo3` | 3 |
-| <img src="assets/models/google.png" width="20" height="20" alt=""> | `google` | `google`, `learnlm`, `nano-banana` | 5 |
-| <img src="assets/models/cogview.png" width="20" height="20" alt=""> | `cogview` | `cogview` | 0 |
-| <img src="assets/models/kolors.png" width="20" height="20" alt=""> | `kolors` | `kolors` | 0 |
-| <img src="assets/models/baiducloud.png" width="20" height="20" alt=""> | `baiducloud` | `baidu`, `qianfan` | 5 |
-| <img src="assets/models/phind.png" width="20" height="20" alt=""> | `phind` | `phind` | 0 |
-| <img src="assets/models/dolphin.png" width="20" height="20" alt=""> | `dolphin` | `dolphin` | 0 |
-| <img src="assets/models/ibm.png" width="20" height="20" alt=""> | `ibm` | `ibm`, `granite` | 15 |
-| <img src="assets/models/skywork.png" width="20" height="20" alt=""> | `skywork` | `skywork` | 0 |
-| <img src="assets/models/bilibiliindex.png" width="20" height="20" alt=""> | `bilibiliindex` | `bilibili-index`, `index-tts` | 0 |
-| <img src="assets/models/bilibili.png" width="20" height="20" alt=""> | `bilibili` | `bilibili` | 0 |
-| <img src="assets/models/lg.png" width="20" height="20" alt=""> | `lg` | `kmmlu`, `exaone`, `lgai` | 0 |
-| <img src="assets/models/tii.png" width="20" height="20" alt=""> | `tii` | `falcon` | 1 |
-| <img src="assets/models/menlo.png" width="20" height="20" alt=""> | `menlo` | `menlo`, `lucy`, `jan-nano` | 0 |
-| <img src="assets/models/longcat.png" width="20" height="20" alt=""> | `longcat` | `longcat` | 20 |
-| <img src="assets/models/kwaipilot.png" width="20" height="20" alt=""> | `kwaipilot` | `kat-` | 24 |
-| <img src="assets/models/nova.png" width="20" height="20" alt=""> | `nova` | `^nova-`, `/nova-` | 28 |
-| <img src="assets/models/xiaomimimo.png" width="20" height="20" alt=""> | `xiaomimimo` | `^mimo-`, `/mimo-` | 112 |
-| <img src="assets/models/baai.png" width="20" height="20" alt=""> | `baai` | `^baai`, `^bge-`, `/bge-`, `touchd`, `robobrain` | 4 |
-| <img src="assets/models/ace.png" width="20" height="20" alt=""> | `ace` | `ace-step` | 0 |
-| <img src="assets/models/cursor.png" width="20" height="20" alt=""> | `cursor` | `^composer`, `/composer`, `-composer` | 4 |
-| <img src="assets/models/typesafeai.png" width="20" height="20" alt=""> | `typesafeai` | `(^\|/)jev($\|-)`, `typesafe` | 14 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/openai.png" width="20" height="20" alt=""> | `openai` | `gpt-3`, `gpt-4`, `gpt-5`, `gpt-oss`, `o1-`, `^o1`, `/o1`, `o3-`, `^o3`, `/o3`, `o4-`, `^o4`, `/o4`, `text-embedding-`, `tts-`, `whisper-`, `codex`, `davinci`, `babbage`, `omni-moderation`, `text-moderation`, `text-adb`, `text-ada`, `computer-use`, `^gpt-`, `/gpt-`, `openai` | 879 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/sora.png" width="20" height="20" alt=""> | `sora` | `sora` | 1 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/dalle.png" width="20" height="20" alt=""> | `dalle` | `dalle`, `dall-e` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/glmv.png" width="20" height="20" alt=""> | `glmv` | `^glm-(.*)v`, `/glm-(.*)v`, `-glm-(.*)v` | 41 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/zai.png" width="20" height="20" alt=""> | `zai` | `^glm-5`, `/glm-5`, `/glm5`, `-glm-4`, `^glm-4`, `/glm-4`, `/glm4`, `-glm-5` | 316 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/chatglm.png" width="20" height="20" alt=""> | `chatglm` | `^glm-`, `/glm-`, `chatglm`, `-glm-` | 12 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/codegeex.png" width="20" height="20" alt=""> | `codegeex` | `^codegeex`, `/codegeex` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/claude.png" width="20" height="20" alt=""> | `claude` | `claude` | 550 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/anthropic.png" width="20" height="20" alt=""> | `anthropic` | `anthropic` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/aws.png" width="20" height="20" alt=""> | `aws` | `titan` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/fireworks.png" width="20" height="20" alt=""> | `fireworks` | `accounts/fireworks/models/fire` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/internlm.png" width="20" height="20" alt=""> | `internlm` | `internlm`, `internvl` | 1 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/nousresearch.png" width="20" height="20" alt=""> | `nousresearch` | `deephermes`, `hermes`, `genstruct`, `minos` | 19 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/nvidia.png" width="20" height="20" alt=""> | `nvidia` | `nemotron`, `openreasoning`, `nemoretriever`, `neva-`, `nv-` | 170 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/meta.png" width="20" height="20" alt=""> | `meta` | `llama`, `/l3` | 193 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/llava.png" width="20" height="20" alt=""> | `llava` | `llava` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/nanobanana.png" width="20" height="20" alt=""> | `nanobanana` | `gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`, `gemini-\d+(?:\.\d+)?-(?:flash(?:-lite)?\|pro)-image(?:-preview)?(?::\|$)`, `nanobanana`, `nano-banana` | 27 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/gemini.png" width="20" height="20" alt=""> | `gemini` | `gemini` | 277 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/deepmind.png" width="20" height="20" alt=""> | `deepmind` | `^imagen-`, `/imagen-`, `^imagen\d/`, `/imagen\d` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/gemma.png" width="20" height="20" alt=""> | `gemma` | `gemma` | 197 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/moonshot.png" width="20" height="20" alt=""> | `moonshot` | `kimi`, `moonshot` | 189 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/qiniu.png" width="20" height="20" alt=""> | `qiniu` | `qiniu` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/qwen.png" width="20" height="20" alt=""> | `qwen` | `qwen`, `qwq`, `qvq`, `wanx`, `wan\d/`, `wan\d\.\d-`, `tongyi`, `gte-rerank` | 657 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/minimax.png" width="20" height="20" alt=""> | `minimax` | `minimax`, `abab`, `^image-` | 186 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/mistral.png" width="20" height="20" alt=""> | `mistral` | `mistral`, `mixtral`, `codestral`, `mathstral`, `/mn-`, `pixtral`, `ministral`, `magistral`, `devstral`, `voxtral` | 213 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/perplexity.png" width="20" height="20" alt=""> | `perplexity` | `pplx`, `sonar` | 21 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/yi.png" width="20" height="20" alt=""> | `yi` | `^yi-`, `/yi-`, `-yi-` | 4 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/openrouter.png" width="20" height="20" alt=""> | `openrouter` | `^openrouter` | 19 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/relace.png" width="20" height="20" alt=""> | `relace` | `^relace-`, `/relace-` | 3 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/arcee.png" width="20" height="20" alt=""> | `arcee` | `^trinity-`, `/trinity-`, `afm-4.5b`, `caller-large`, `spotlight`, `maestro-reasoning`, `virtuoso-medium-v2`, `virtuoso-large`, `coder-large`, `arcee-blitz` | 23 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/essentialai.png" width="20" height="20" alt=""> | `essentialai` | `^rnj-`, `/rnj-` | 5 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/deepcogito.png" width="20" height="20" alt=""> | `deepcogito` | `^deepcogito-`, `/deepcogito-`, `^cogito-`, `/cogito-` | 3 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/morph.png" width="20" height="20" alt=""> | `morph` | `^morph-`, `/morph-` | 3 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/ai2.png" width="20" height="20" alt=""> | `ai2` | `^olmo-`, `/olmo-` | 10 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/inception.png" width="20" height="20" alt=""> | `inception` | `^mercury`, `/mercury` | 28 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/openchat.png" width="20" height="20" alt=""> | `openchat` | `^openchat` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/aya.png" width="20" height="20" alt=""> | `aya` | `aya` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/cohere.png" width="20" height="20" alt=""> | `cohere` | `command` | 16 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/dbrx.png" width="20" height="20" alt=""> | `dbrx` | `dbrx` | 1 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/stepfun.png" width="20" height="20" alt=""> | `stepfun` | `step` | 47 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/aimass.png" width="20" height="20" alt=""> | `aimass` | `taichu` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/ai360.png" width="20" height="20" alt=""> | `ai360` | `360gpt`, `360zhinao` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/baichuan.png" width="20" height="20" alt=""> | `baichuan` | `baichuan` | 4 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/rwkv.png" width="20" height="20" alt=""> | `rwkv` | `rwkv`, `/eagle-` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/wenxin.png" width="20" height="20" alt=""> | `wenxin` | `ernie`, `irag` | 35 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/jina.png" width="20" height="20" alt=""> | `jina` | `^jina`, `/jina` | 1 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/jimeng.png" width="20" height="20" alt=""> | `jimeng` | `^jimeng-`, `/jimeng-`, `seedream`, `seededit`, `seedance-` | 21 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/doubao.png" width="20" height="20" alt=""> | `doubao` | `^ep-`, `doubao-` | 32 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/kling.png" width="20" height="20" alt=""> | `kling` | `^kling`, `kling-`, `klingai` | 19 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/hunyuan.png" width="20" height="20" alt=""> | `hunyuan` | `hunyuan`, `hy3`, `hy4` | 37 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/fishaudio.png" width="20" height="20" alt=""> | `fishaudio` | `^d_`, `^g_`, `^wd_` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/bytedance.png" width="20" height="20" alt=""> | `bytedance` | `skylark`, `seed-`, `bytedance` | 34 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/burncloud.png" width="20" height="20" alt=""> | `burncloud` | `burncloud` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/stability.png" width="20" height="20" alt=""> | `stability` | `stable-diffusion`, `stable-video`, `stable-cascade`, `sdxl`, `stablelm`, `^stable-`, `^sd3`, `^sd2`, `^sd1` | 2 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/flux.png" width="20" height="20" alt=""> | `flux` | `flux` | 12 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/suno.png" width="20" height="20" alt=""> | `suno` | `suno` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/microsoft.png" width="20" height="20" alt=""> | `microsoft` | `wizardlm`, `/phi-`, `^phi-`, `-phi-`, `mai-`, `microsoft` | 31 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/adobe.png" width="20" height="20" alt=""> | `adobe` | `firefly` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/ai21.png" width="20" height="20" alt=""> | `ai21` | `jamba`, `^j2-`, `ai21` | 9 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/upstage.png" width="20" height="20" alt=""> | `upstage` | `^solar-`, `/solar` | 17 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/palm.png" width="20" height="20" alt=""> | `palm` | `palm` | 11 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/sensenova.png" width="20" height="20" alt=""> | `sensenova` | `SenseChat`, `SenseNova` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/grok.png" width="20" height="20" alt=""> | `grok` | `^grok-`, `/grok-` | 212 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/ideogram.png" width="20" height="20" alt=""> | `ideogram` | `ideogram`, `^v_1`, `^v_2`, `^v3$`, `^upscale$`, `^describe$` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/muse.png" width="20" height="20" alt=""> | `muse` | `(^\|/)muse-(spark\|wonder\|image\|video)($\|-)` | 75 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/spark.png" width="20" height="20" alt=""> | `spark` | `spark`, `general$`, `generalv3$`, `generalv3.5$`, `4.0ultra$`, `pro-128k$`, `^max-32k$`, `^lite$`, `^x1$` | 2 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/udio.png" width="20" height="20" alt=""> | `udio` | `udio` | 5 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/unionalpha.png" width="20" height="20" alt=""> | `unionalpha` | `union-alpha`, `unionalpha`, `pareto` | 15 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/deepseek.png" width="20" height="20" alt=""> | `deepseek` | `deepseek` | 281 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/voyage.png" width="20" height="20" alt=""> | `voyage` | `voyage` | 16 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/assemblyai.png" width="20" height="20" alt=""> | `assemblyai` | `assemblyai` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/liquid.png" width="20" height="20" alt=""> | `liquid` | `liquid`, `lfm` | 19 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/inflection.png" width="20" height="20" alt=""> | `inflection` | `inflection-` | 4 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/aionlabs.png" width="20" height="20" alt=""> | `aionlabs` | `aion-` | 26 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/aihubmix.png" width="20" height="20" alt=""> | `aihubmix` | `aihubmix` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/v0.png" width="20" height="20" alt=""> | `v0` | `^v0-` | 3 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/vertexai.png" width="20" height="20" alt=""> | `vertexai` | `^veo-`, `/veo-`, `^veo3` | 3 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/google.png" width="20" height="20" alt=""> | `google` | `google`, `learnlm`, `nano-banana` | 5 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/cogview.png" width="20" height="20" alt=""> | `cogview` | `cogview` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/kolors.png" width="20" height="20" alt=""> | `kolors` | `kolors` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/baiducloud.png" width="20" height="20" alt=""> | `baiducloud` | `baidu`, `qianfan` | 5 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/phind.png" width="20" height="20" alt=""> | `phind` | `phind` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/dolphin.png" width="20" height="20" alt=""> | `dolphin` | `dolphin` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/ibm.png" width="20" height="20" alt=""> | `ibm` | `ibm`, `granite` | 15 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/skywork.png" width="20" height="20" alt=""> | `skywork` | `skywork` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/bilibiliindex.png" width="20" height="20" alt=""> | `bilibiliindex` | `bilibili-index`, `index-tts` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/bilibili.png" width="20" height="20" alt=""> | `bilibili` | `bilibili` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/lg.png" width="20" height="20" alt=""> | `lg` | `kmmlu`, `exaone`, `lgai` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/tii.png" width="20" height="20" alt=""> | `tii` | `falcon` | 1 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/menlo.png" width="20" height="20" alt=""> | `menlo` | `menlo`, `lucy`, `jan-nano` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/longcat.png" width="20" height="20" alt=""> | `longcat` | `longcat` | 20 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/kwaipilot.png" width="20" height="20" alt=""> | `kwaipilot` | `kat-` | 24 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/nova.png" width="20" height="20" alt=""> | `nova` | `^nova-`, `/nova-` | 28 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/xiaomimimo.png" width="20" height="20" alt=""> | `xiaomimimo` | `^mimo-`, `/mimo-` | 112 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/baai.png" width="20" height="20" alt=""> | `baai` | `^baai`, `^bge-`, `/bge-`, `touchd`, `robobrain` | 4 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/ace.png" width="20" height="20" alt=""> | `ace` | `ace-step` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/cursor.png" width="20" height="20" alt=""> | `cursor` | `^composer`, `/composer`, `-composer` | 4 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/typesafeai.png" width="20" height="20" alt=""> | `typesafeai` | `(^\|/)jev($\|-)`, `typesafe` | 14 |
 
 **Fallback matched against the provider id** (only when no model rule matches):
 
 | Logo | Key | Provider id contains | omp catalog models |
 | --- | --- | --- | --- |
-| <img src="assets/models/alibaba.png" width="20" height="20" alt=""> | `alibaba` | `alibaba` | 0 |
-| <img src="assets/models/alephalpha.png" width="20" height="20" alt=""> | `alephalpha` | `alephalpha` | 0 |
-| <img src="assets/models/antgroup.png" width="20" height="20" alt=""> | `antgroup` | `antgroup` | 0 |
-| <img src="assets/models/anyscale.png" width="20" height="20" alt=""> | `anyscale` | `anyscale` | 0 |
-| <img src="assets/models/apple.png" width="20" height="20" alt=""> | `apple` | `apple` | 0 |
-| <img src="assets/models/baidu.png" width="20" height="20" alt=""> | `baidu` | `baidu` | 0 |
-| <img src="assets/models/bailian.png" width="20" height="20" alt=""> | `bailian` | `bailian`, `bailiancodingplan` | 0 |
-| <img src="assets/models/baseten.png" width="20" height="20" alt=""> | `baseten` | `baseten` | 0 |
-| <img src="assets/models/bilibili.png" width="20" height="20" alt=""> | `bilibili` | `bilibili` | 0 |
-| <img src="assets/models/bytedance.png" width="20" height="20" alt=""> | `bytedance` | `bytedance` | 34 |
-| <img src="assets/models/centml.png" width="20" height="20" alt=""> | `centml` | `centml` | 0 |
-| <img src="assets/models/civitai.png" width="20" height="20" alt=""> | `civitai` | `civitai` | 0 |
-| <img src="assets/models/crusoe.png" width="20" height="20" alt=""> | `crusoe` | `crusoe` | 0 |
-| <img src="assets/models/deepinfra.png" width="20" height="20" alt=""> | `deepinfra` | `deepinfra` | 6 |
-| <img src="assets/models/deepmind.png" width="20" height="20" alt=""> | `deepmind` | `deepmind` | 0 |
-| <img src="assets/models/empiriolabs.png" width="20" height="20" alt=""> | `empiriolabs` | `empiriolabs` | 0 |
-| <img src="assets/models/exa.png" width="20" height="20" alt=""> | `exa` | `exa` | 0 |
-| <img src="assets/models/featherless.png" width="20" height="20" alt=""> | `featherless` | `featherless` | 0 |
-| <img src="assets/models/friendli.png" width="20" height="20" alt=""> | `friendli` | `friendli` | 0 |
-| <img src="assets/models/googlecloud.png" width="20" height="20" alt=""> | `googlecloud` | `googlecloud` | 0 |
-| <img src="assets/models/huawei.png" width="20" height="20" alt=""> | `huawei` | `huawei` | 0 |
-| <img src="assets/models/huaweicloud.png" width="20" height="20" alt=""> | `huaweicloud` | `huaweicloud` | 0 |
-| <img src="assets/models/hyperbolic.png" width="20" height="20" alt=""> | `hyperbolic` | `hyperbolic` | 0 |
-| <img src="assets/models/ibm.png" width="20" height="20" alt=""> | `ibm` | `ibm` | 15 |
-| <img src="assets/models/iflytekcloud.png" width="20" height="20" alt=""> | `iflytekcloud` | `iflytekcloud` | 0 |
-| <img src="assets/models/inference.png" width="20" height="20" alt=""> | `inference` | `inference` | 0 |
-| <img src="assets/models/infermatic.png" width="20" height="20" alt=""> | `infermatic` | `infermatic` | 0 |
-| <img src="assets/models/kluster.png" width="20" height="20" alt=""> | `kluster` | `kluster` | 0 |
-| <img src="assets/models/lambda.png" width="20" height="20" alt=""> | `lambda` | `lambda` | 0 |
-| <img src="assets/models/leptonai.png" width="20" height="20" alt=""> | `leptonai` | `leptonai` | 0 |
-| <img src="assets/models/llmapi.png" width="20" height="20" alt=""> | `llmapi` | `llmapi` | 0 |
-| <img src="assets/models/llmgateway.png" width="20" height="20" alt=""> | `llmgateway` | `llmgateway` | 0 |
-| <img src="assets/models/lg.png" width="20" height="20" alt=""> | `lg` | `lg` | 0 |
-| <img src="assets/models/menlo.png" width="20" height="20" alt=""> | `menlo` | `menlo` | 0 |
-| <img src="assets/models/metaai.png" width="20" height="20" alt=""> | `metaai` | `meta` | 0 |
-| <img src="assets/models/microsoft.png" width="20" height="20" alt=""> | `microsoft` | `microsoft` | 31 |
-| <img src="assets/models/nplcloud.png" width="20" height="20" alt=""> | `nplcloud` | `nplcloud` | 0 |
-| <img src="assets/models/nousresearch.png" width="20" height="20" alt=""> | `nousresearch` | `nousresearch` | 19 |
-| <img src="assets/models/parasail.png" width="20" height="20" alt=""> | `parasail` | `parasail` | 0 |
-| <img src="assets/models/searchapi.png" width="20" height="20" alt=""> | `searchapi` | `searchapi` | 0 |
-| <img src="assets/models/snowflake.png" width="20" height="20" alt=""> | `snowflake` | `snowflake` | 0 |
-| <img src="assets/models/stability.png" width="20" height="20" alt=""> | `stability` | `stability` | 2 |
-| <img src="assets/models/statecloud.png" width="20" height="20" alt=""> | `statecloud` | `statecloud` | 0 |
-| <img src="assets/models/streamlake.png" width="20" height="20" alt=""> | `streamlake` | `streamlake` | 0 |
-| <img src="assets/models/sub2api.png" width="20" height="20" alt=""> | `sub2api` | `sub2api` | 0 |
-| <img src="assets/models/submodel.png" width="20" height="20" alt=""> | `submodel` | `submodel` | 0 |
-| <img src="assets/models/targon.png" width="20" height="20" alt=""> | `targon` | `targon` | 0 |
-| <img src="assets/models/tencent.png" width="20" height="20" alt=""> | `tencent` | `tencent` | 0 |
-| <img src="assets/models/tii.png" width="20" height="20" alt=""> | `tii` | `tii` | 1 |
-| <img src="assets/models/typesafeai.png" width="20" height="20" alt=""> | `typesafeai` | `typesafe`, `typesafe-ai`, `typesafeai` | 14 |
-| <img src="assets/models/unsloth.png" width="20" height="20" alt=""> | `unsloth` | `unsloth` | 0 |
-| <img src="assets/models/yandex.png" width="20" height="20" alt=""> | `yandex` | `yandex` | 0 |
-| <img src="assets/models/aimass.png" width="20" height="20" alt=""> | `aimass` | `aimass` | 0 |
-| <img src="assets/models/aistudio.png" width="20" height="20" alt=""> | `aistudio` | `aistudio` | 0 |
-| <img src="assets/models/novita.png" width="20" height="20" alt=""> | `novita` | `novita` | 12 |
-| <img src="assets/models/openai.png" width="20" height="20" alt=""> | `openai` | `chatgpt`, `openai` | 879 |
-| <img src="assets/models/opencode.png" width="20" height="20" alt=""> | `opencode` | `opencode`, `opencodecodingplan`, `opencodego`, `opencodezen` | 20 |
-| <img src="assets/models/perplexity.png" width="20" height="20" alt=""> | `perplexity` | `perplexity` | 21 |
-| <img src="assets/models/mistral.png" width="20" height="20" alt=""> | `mistral` | `mistral` | 213 |
-| <img src="assets/models/groq.png" width="20" height="20" alt=""> | `groq` | `groq` | 2 |
-| <img src="assets/models/together.png" width="20" height="20" alt=""> | `together` | `togetherai` | 0 |
-| <img src="assets/models/doubao.png" width="20" height="20" alt=""> | `doubao` | `doubao` | 32 |
-| <img src="assets/models/hunyuan.png" width="20" height="20" alt=""> | `hunyuan` | `hunyuan` | 37 |
-| <img src="assets/models/nvidia.png" width="20" height="20" alt=""> | `nvidia` | `nvidia` | 170 |
-| <img src="assets/models/tencentcloud.png" width="20" height="20" alt=""> | `tencentcloud` | `tencentcloud` | 0 |
-| <img src="assets/models/wenxin.png" width="20" height="20" alt=""> | `wenxin` | `wenxin` | 35 |
-| <img src="assets/models/lmstudio.png" width="20" height="20" alt=""> | `lmstudio` | `lmstudio` | 0 |
-| <img src="assets/models/magpie.png" width="20" height="20" alt=""> | `magpie` | `magpie`, `magpie` | 0 |
-| <img src="assets/models/grok.png" width="20" height="20" alt=""> | `grok` | `supergrok` | 212 |
-| <img src="assets/models/higress.png" width="20" height="20" alt=""> | `higress` | `higress` | 0 |
-| <img src="assets/models/vertexai.png" width="20" height="20" alt=""> | `vertexai` | `vertexai` | 3 |
-| <img src="assets/models/jina.png" width="20" height="20" alt=""> | `jina` | `jina` | 1 |
-| <img src="assets/models/azureai.png" width="20" height="20" alt=""> | `azureai` | `azureai` | 0 |
-| <img src="assets/models/volcengine.png" width="20" height="20" alt=""> | `volcengine` | `volcengine`, `volcenginecodingplan` | 0 |
-| <img src="assets/models/cohere.png" width="20" height="20" alt=""> | `cohere` | `cohere` | 16 |
-| <img src="assets/models/comfyui.png" width="20" height="20" alt=""> | `comfyui` | `comfyui` | 0 |
-| <img src="assets/models/cometapi.png" width="20" height="20" alt=""> | `cometapi` | `cometapi` | 0 |
-| <img src="assets/models/vercel.png" width="20" height="20" alt=""> | `vercel` | `v0` | 0 |
-| <img src="assets/models/bfl.png" width="20" height="20" alt=""> | `bfl` | `bfl` | 0 |
-| <img src="assets/models/flexai.png" width="20" height="20" alt=""> | `flexai` | `flexai` | 0 |
-| <img src="assets/models/ollama.png" width="20" height="20" alt=""> | `ollama` | `ollamacloud` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/alibaba.png" width="20" height="20" alt=""> | `alibaba` | `alibaba` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/alephalpha.png" width="20" height="20" alt=""> | `alephalpha` | `alephalpha` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/antgroup.png" width="20" height="20" alt=""> | `antgroup` | `antgroup` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/anyscale.png" width="20" height="20" alt=""> | `anyscale` | `anyscale` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/apple.png" width="20" height="20" alt=""> | `apple` | `apple` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/baidu.png" width="20" height="20" alt=""> | `baidu` | `baidu` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/bailian.png" width="20" height="20" alt=""> | `bailian` | `bailian`, `bailiancodingplan` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/baseten.png" width="20" height="20" alt=""> | `baseten` | `baseten` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/bilibili.png" width="20" height="20" alt=""> | `bilibili` | `bilibili` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/bytedance.png" width="20" height="20" alt=""> | `bytedance` | `bytedance` | 34 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/centml.png" width="20" height="20" alt=""> | `centml` | `centml` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/civitai.png" width="20" height="20" alt=""> | `civitai` | `civitai` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/crusoe.png" width="20" height="20" alt=""> | `crusoe` | `crusoe` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/deepinfra.png" width="20" height="20" alt=""> | `deepinfra` | `deepinfra` | 6 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/deepmind.png" width="20" height="20" alt=""> | `deepmind` | `deepmind` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/empiriolabs.png" width="20" height="20" alt=""> | `empiriolabs` | `empiriolabs` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/exa.png" width="20" height="20" alt=""> | `exa` | `exa` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/featherless.png" width="20" height="20" alt=""> | `featherless` | `featherless` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/friendli.png" width="20" height="20" alt=""> | `friendli` | `friendli` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/googlecloud.png" width="20" height="20" alt=""> | `googlecloud` | `googlecloud` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/huawei.png" width="20" height="20" alt=""> | `huawei` | `huawei` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/huaweicloud.png" width="20" height="20" alt=""> | `huaweicloud` | `huaweicloud` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/hyperbolic.png" width="20" height="20" alt=""> | `hyperbolic` | `hyperbolic` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/ibm.png" width="20" height="20" alt=""> | `ibm` | `ibm` | 15 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/iflytekcloud.png" width="20" height="20" alt=""> | `iflytekcloud` | `iflytekcloud` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/inference.png" width="20" height="20" alt=""> | `inference` | `inference` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/infermatic.png" width="20" height="20" alt=""> | `infermatic` | `infermatic` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/kluster.png" width="20" height="20" alt=""> | `kluster` | `kluster` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/lambda.png" width="20" height="20" alt=""> | `lambda` | `lambda` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/leptonai.png" width="20" height="20" alt=""> | `leptonai` | `leptonai` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/llmapi.png" width="20" height="20" alt=""> | `llmapi` | `llmapi` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/llmgateway.png" width="20" height="20" alt=""> | `llmgateway` | `llmgateway` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/lg.png" width="20" height="20" alt=""> | `lg` | `lg` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/menlo.png" width="20" height="20" alt=""> | `menlo` | `menlo` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/metaai.png" width="20" height="20" alt=""> | `metaai` | `meta` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/microsoft.png" width="20" height="20" alt=""> | `microsoft` | `microsoft` | 31 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/nplcloud.png" width="20" height="20" alt=""> | `nplcloud` | `nplcloud` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/nousresearch.png" width="20" height="20" alt=""> | `nousresearch` | `nousresearch` | 19 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/parasail.png" width="20" height="20" alt=""> | `parasail` | `parasail` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/searchapi.png" width="20" height="20" alt=""> | `searchapi` | `searchapi` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/snowflake.png" width="20" height="20" alt=""> | `snowflake` | `snowflake` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/stability.png" width="20" height="20" alt=""> | `stability` | `stability` | 2 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/statecloud.png" width="20" height="20" alt=""> | `statecloud` | `statecloud` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/streamlake.png" width="20" height="20" alt=""> | `streamlake` | `streamlake` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/sub2api.png" width="20" height="20" alt=""> | `sub2api` | `sub2api` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/submodel.png" width="20" height="20" alt=""> | `submodel` | `submodel` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/targon.png" width="20" height="20" alt=""> | `targon` | `targon` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/tencent.png" width="20" height="20" alt=""> | `tencent` | `tencent` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/tii.png" width="20" height="20" alt=""> | `tii` | `tii` | 1 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/typesafeai.png" width="20" height="20" alt=""> | `typesafeai` | `typesafe`, `typesafe-ai`, `typesafeai` | 14 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/unsloth.png" width="20" height="20" alt=""> | `unsloth` | `unsloth` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/yandex.png" width="20" height="20" alt=""> | `yandex` | `yandex` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/aimass.png" width="20" height="20" alt=""> | `aimass` | `aimass` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/aistudio.png" width="20" height="20" alt=""> | `aistudio` | `aistudio` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/novita.png" width="20" height="20" alt=""> | `novita` | `novita` | 12 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/openai.png" width="20" height="20" alt=""> | `openai` | `chatgpt`, `openai` | 879 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/opencode.png" width="20" height="20" alt=""> | `opencode` | `opencode`, `opencodecodingplan`, `opencodego`, `opencodezen` | 20 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/perplexity.png" width="20" height="20" alt=""> | `perplexity` | `perplexity` | 21 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/mistral.png" width="20" height="20" alt=""> | `mistral` | `mistral` | 213 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/groq.png" width="20" height="20" alt=""> | `groq` | `groq` | 2 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/together.png" width="20" height="20" alt=""> | `together` | `togetherai` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/doubao.png" width="20" height="20" alt=""> | `doubao` | `doubao` | 32 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/hunyuan.png" width="20" height="20" alt=""> | `hunyuan` | `hunyuan` | 37 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/nvidia.png" width="20" height="20" alt=""> | `nvidia` | `nvidia` | 170 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/tencentcloud.png" width="20" height="20" alt=""> | `tencentcloud` | `tencentcloud` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/wenxin.png" width="20" height="20" alt=""> | `wenxin` | `wenxin` | 35 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/lmstudio.png" width="20" height="20" alt=""> | `lmstudio` | `lmstudio` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/magpie.png" width="20" height="20" alt=""> | `magpie` | `magpie`, `magpie` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/grok.png" width="20" height="20" alt=""> | `grok` | `supergrok` | 212 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/higress.png" width="20" height="20" alt=""> | `higress` | `higress` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/vertexai.png" width="20" height="20" alt=""> | `vertexai` | `vertexai` | 3 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/jina.png" width="20" height="20" alt=""> | `jina` | `jina` | 1 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/azureai.png" width="20" height="20" alt=""> | `azureai` | `azureai` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/volcengine.png" width="20" height="20" alt=""> | `volcengine` | `volcengine`, `volcenginecodingplan` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/cohere.png" width="20" height="20" alt=""> | `cohere` | `cohere` | 16 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/comfyui.png" width="20" height="20" alt=""> | `comfyui` | `comfyui` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/cometapi.png" width="20" height="20" alt=""> | `cometapi` | `cometapi` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/vercel.png" width="20" height="20" alt=""> | `vercel` | `v0` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/bfl.png" width="20" height="20" alt=""> | `bfl` | `bfl` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/flexai.png" width="20" height="20" alt=""> | `flexai` | `flexai` | 0 |
+| <img src="https://raw.githubusercontent.com/hiiruki/omp-discord-presence/main/assets/models/ollama.png" width="20" height="20" alt=""> | `ollama` | `ollamacloud` | 0 |
 <!-- model-icons:end -->
 
 #### Updating the logos
