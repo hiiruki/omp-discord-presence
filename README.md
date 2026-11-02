@@ -11,6 +11,25 @@ using tool · bash · anthropic/claude-opus-4 · effort: high
 [ View on GitHub ]
 ```
 
+## Features
+
+- **Live status:** idle, thinking, using a tool, waiting for you (approval, `ask`, plan review), compacting context, retrying, and away after a quiet period.
+- **Session details:** omp version, project name, active omp modes (plan, goal, loop, vibe), and the model with its effort. A model or effort switch shows within seconds, even without a prompt.
+- **Model logo:** the model maker's logo as a small badge, from [lobe-icons](https://github.com/lobehub/lobe-icons) (156 logos, matched on the model id first, then the provider).
+- **GitHub button:** **View on GitHub** for public repos.
+- **Subagents as a party:** running task/eval subagents show as `(3 of 4)`.
+- **Optional extras:** git branch (`project @ main`) and context-window usage (`context 42%`), both off by default.
+- **Privacy:**
+  - hide any project's name with `/discord-presence hide`;
+  - private GitHub repos are hidden automatically and fail closed;
+  - the model, button and branch can each be turned off;
+  - goal objectives, plan paths, approval reasons and retry errors are never sent.
+- **Settings menu** in the omp TUI (`/discord-presence settings`), with **per-project overrides**. Every change applies live to all running sessions.
+- **Status report** (`/discord-presence status`): exactly what Discord receives, and why a logo or button is missing.
+- **Works everywhere:** Windows, macOS, Linux and WSL. On WSL, a bundled bridge means no `socat` relay is needed.
+
+## What Discord shows
+
 Status changes reach Discord within about 4 seconds. Updates are spaced out because Discord accepts only 5 activity updates per 20 seconds, and the latest state is always sent last. While tools run in parallel, the status stays on "using tool" until the last one finishes. Automatic context compaction and provider retries get their own status (`compacting context`, `retrying · attempt 2/5`). The retry's error message is never shown. The model and effort follow the selection in the omp session: a switch (`/model`, the model picker, ⇧⇥ for effort) shows within a few seconds, even without a prompt.
 
 Active modes are joined with `+`, and paused modes get `(paused)`, e.g. `plan mode + goal mode (paused)`. Only the mode name is shown: the goal objective and the plan file path stay private.
@@ -66,26 +85,44 @@ Works out of the box on Windows, macOS, Linux and WSL. No Discord setup, relay, 
 omp install omp-discord-presence
 ```
 
-Restart omp and the status appears. On WSL the bundled bridge starts by itself. To uninstall, run `omp plugin uninstall omp-discord-presence`.
+Restart omp and the status appears; on WSL the bundled bridge starts by itself. Run `/discord-presence status` inside omp to check that it is connected.
 
-From a local checkout (development):
-
-```bash
-pnpm install
-omp -e .                              # this session only
-omp install /path/to/omp-discord-presence   # links the folder; edits apply after an omp restart
-```
-
-### Publishing (maintainer)
+Other ways to load it:
 
 ```bash
-npm login
-npm publish
+omp -e /path/to/omp-discord-presence        # this session only, nothing installed
+omp install /path/to/omp-discord-presence   # link a local checkout (run `pnpm install` in it first)
 ```
 
-The package ships only `extensions/`, `bin/` and `assets/`, about 1.9 MB. `@oh-my-pi/pi-coding-agent` is an optional peer, so installing the plugin doesn't pull a second copy of omp.
+Only the main session talks to Discord. Subagent sessions (task tool, eval agents) never connect; they only report how many of them are running, which is shown as the Discord party.
 
-Only the main session talks to Discord; subagent sessions (task tool, eval agents) never connect and only report how many of them are running (shown as the Discord party).
+## Update
+
+```bash
+omp plugin upgrade omp-discord-presence
+```
+
+Then restart omp. omp doesn't check plugins for updates on its own, so run this whenever you want the latest release. To move to a specific version instead:
+
+```bash
+omp install omp-discord-presence@0.2.0
+```
+
+- **What's kept:** settings, hidden projects and per-project overrides live in `~/.omp/agent/discord-presence-state.json`, outside the plugin, so updates keep them. The plugin also stays enabled.
+- **Linked checkouts** (`omp install /path`) can't be upgraded. Run `git pull && pnpm install` in the folder, then restart omp.
+
+## Uninstall
+
+```bash
+omp plugin uninstall omp-discord-presence
+```
+
+Restart omp. When the plugin's last session ends, it clears its activity from Discord. This also removes a linked checkout from omp; the folder itself stays.
+
+- **Pause without uninstalling:**
+  - `/discord-presence off` stops the presence in every session, and `/discord-presence on` resumes it;
+  - `omp plugin disable omp-discord-presence` (and `enable`) stops omp from loading the plugin at all.
+- **Remove the saved settings too:** `rm ~/.omp/agent/discord-presence-state.json`.
 
 ## Platform support
 
@@ -113,19 +150,26 @@ Requirements: WSL interop must be enabled (the default), and Discord must be the
 flowchart TD
     subgraph omp["omp session"]
         E1["session_start"]
-        E2["agent_start / agent_end"]
+        E2["agent_start / turn_end / agent_end"]
         E3["tool_execution_start / end"]
         E8["tool_approval / plan_review<br/>requested / resolved"]
         E6["auto_compaction / auto_retry<br/>start / end"]
         E7["mode_changed<br/>(plan / goal / loop / vibe)"]
-        E4["/discord-presence command"]
+        E4["/discord-presence commands<br/>+ settings menu"]
         E5["session_shutdown"]
     end
 
+    subgraph subs["subagent sessions (same process)"]
+        SA["agent_start / agent_end"]
+    end
+
     subgraph plugin["discord-presence plugin (main session only)"]
-        P["presence state<br/>status · tool · model · start time"]
-        S[("~/.omp/agent/<br/>discord-presence-state.json<br/>enabled · hiddenProjects")]
+        P["presence state<br/>status · detail · model · context"]
+        SC["shared subagent counter<br/>running · batch"]
+        S[("discord-presence-state.json<br/>global settings · hiddenProjects<br/>per-project overrides")]
+        EF["settings for this project<br/>(global + overrides)"]
         T["throttle<br/>0.75 s debounce, 4 s spacing"]
+        RC{"GitHub check<br/>finished? (≤ 5 s)"}
         B["build activity"]
     end
 
@@ -133,20 +177,43 @@ flowchart TD
         V["omp version"]
         M["live model + effort<br/>(polled every 3 s)"]
         L["lobe-icons logo key"]
-        G["public GitHub URL<br/>(git origin + GitHub API)"]
+        G["GitHub visibility<br/>public → button<br/>private → auto-hide"]
+        BR["git branch<br/>(polled every 15 s while shown)"]
+        A["app name + icon<br/>(Discord API)"]
     end
 
     E1 & E2 & E3 & E6 & E7 & E8 --> P
-    E4 -- "on / off / hide / show" --> S
-    S -- "file watcher<br/>(all sessions)" --> P
-    P --> T --> B
-    V & M & L & G --> B
-    B -- "SET_ACTIVITY" --> RPC["discord-rpc client"]
+    SA --> SC --> P
+    E4 -- "on / off / hide / show / settings" --> S
+    S -- "file watcher<br/>(all sessions)" --> EF --> P
+    P --> T --> RC -- "yes" --> B
+    V & M & L & G & BR & A --> B
+    B -- "SET_ACTIVITY<br/>details · state · logo · button · party" --> RPC["discord-rpc client"]
     RPC --> D["Discord desktop app"]
     E5 -- "clear activity, close bridge" --> RPC
 ```
 
 Subagent sessions (task tool, eval agents) also load the plugin, but they never connect, so they can't overwrite or clear the main session's status. They run in the same process and share the plugin module. Each one bumps a shared counter while its agent loop runs, and the main session shows that count as the Discord party size.
+
+### Project name and privacy
+
+What goes in the first line (`omp v… · <project> · <modes>`) is decided like this; the button follows the same decision:
+
+```mermaid
+flowchart TD
+    S["session cwd"] --> H{"in hiddenProjects?<br/>(/discord-presence hide)"}
+    H -- "yes" --> PP["private project<br/>no button · no branch"]
+    H -- "no" --> O{"git origin<br/>on GitHub?"}
+    O -- "no" --> N["folder name<br/>no button"]
+    O -- "yes" --> API{"anonymous GitHub API"}
+    API -- "public (200)" --> NB["folder name<br/>+ View on GitHub"]
+    API -- "private (404)<br/>or unknown (offline, rate limit)" --> AH{"Auto-hide private repos<br/>on? (default)"}
+    AH -- "yes" --> PP
+    AH -- "no" --> N
+    N & NB --> BRQ{"Git branch shown<br/>for this project?"}
+    BRQ -- "yes" --> NBR["name @ branch"]
+    BRQ -- "no" --> NN["name"]
+```
 
 ### Connecting to Discord
 
@@ -338,6 +405,22 @@ All settings, per-project overrides and the hidden project list are shared by ev
 - **`/discord-presence status` says "not connected":** check that the Discord desktop app is running and that activity sharing is on. The plugin retries every 15 seconds.
 - **Status stays "not connected" right after restarting omp many times in a row:** Discord briefly stops answering when clients reconnect rapidly. Wait a minute.
 - **Logo badge is blank:** run `/discord-presence status`. `logo: … ✗ not uploaded` means that Art Asset is missing from the Discord application (see below). `logo: none` means no lobe-icons rule matches the model.
+
+## Publishing a release (maintainer)
+
+1. Bump `version` in `package.json`: patch for fixes, minor for features. npm rejects republishing a version.
+2. Commit, then publish:
+
+   ```bash
+   npm login      # once
+   npm publish
+   ```
+
+3. Users pick it up with `omp plugin upgrade omp-discord-presence`.
+
+The package ships only `extensions/`, `bin/` and `assets/`, about 1.9 MB. `@oh-my-pi/pi-coding-agent` and `@oh-my-pi/pi-utils` are optional peers resolved from the running omp, so installing the plugin doesn't pull a second copy of omp.
+
+Changes to the Discord application (name, icon, Art Assets) reach every user immediately, with no release. New logo rules in `extensions/model-icons.generated.ts` still need a release.
 
 ## Discord application (maintainer setup)
 
