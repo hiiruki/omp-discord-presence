@@ -51,7 +51,12 @@ jobs:
           fi
 
       - name: Check CHANGELOG.md has this version
-        run: grep -q "^## \[${GITHUB_REF_NAME#v}\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no ## [${GITHUB_REF_NAME#v}] section"; exit 1; }
+        # Block scalar: in a plain YAML scalar, " #" would start a comment and cut the command.
+        run: |
+          if ! grep -q "^## \[${GITHUB_REF_NAME#v}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no ## [${GITHUB_REF_NAME#v}] section"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
