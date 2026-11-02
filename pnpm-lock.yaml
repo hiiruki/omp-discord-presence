@@ -175,7 +175,7 @@ importers:
         version: 18.14.2
       '@oh-my-pi/pi-coding-agent':
         specifier: ^18.14.2
-        version: 18.14.2(@types/node@24.12.3)
+        version: 18.14.2(@types/node@26.6.6)
       '@oh-my-pi/pi-utils':
         specifier: ^18.14.2
         version: 18.14.2
@@ -186,8 +186,8 @@ importers:
         specifier: ^4.0.10
         version: 4.0.10
       '@types/node':
-        specifier: ^24.0.0
-        version: 24.12.3
+        specifier: ^26.6.6
+        version: 26.6.6
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260509.2
         version: 7.0.0-dev.20260509.2
@@ -783,8 +783,8 @@ packages:
   '@types/events@3.0.3':
     resolution: {integrity: sha512-trOc4AAUThEz9hapPtSd7wf5tiQKvTtu5b371UxXdTuqzIh0ArcRspRP0i0Viu+LXstIQ1z96t1nsPxT9ol01g==}
 
-  '@types/node@24.12.3':
-    resolution: {integrity: sha512-8oljBDGun9cIsZRJR6fkihn0TSXJI0UDOOhncYaERq6M0JMDoPLxyscwruJcb4GKS6dvK/d8xebYBg27h/duaQ==}
+  '@types/node@26.6.6':
+    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260509.2':
     resolution: {integrity: sha512-oG9KahiCpx4q70Ood/rRJhYio4oIMHEHfX0g0LhfenlSIjIonitZWjUmUVG9N9q1ev9QWcM8pWpDrGGP0Osp3Q==}
@@ -1094,6 +1094,9 @@ packages:
   undici-types@7.16.0:
     resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
 
+  undici-types@8.9.0:
+    resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
+
   webdriver-bidi-protocol@0.4.2:
     resolution: {integrity: sha512-VSV+fzfChirL3e7jay2yUC7B4HQCGtEWEg/MSSQbK+qWbqeGlRLlXTzPpYr3XGUvbpDHumWZBJxgesg4N7dbtA==}
 
@@ -1175,13 +1178,13 @@ snapshots:
   '@huggingface/tokenizers@0.2.0':
     optional: true
 
-  '@huggingface/transformers@4.3.2(@types/node@24.12.3)':
+  '@huggingface/transformers@4.3.2(@types/node@26.6.6)':
     dependencies:
       '@huggingface/jinja': 0.5.11
       '@huggingface/tokenizers': 0.2.0
       onnxruntime-node: 1.30.0
       onnxruntime-web: 1.31.0-dev.20260914-8d85527a0
-      sharp: 0.35.5(@types/node@24.12.3)
+      sharp: 0.35.5(@types/node@26.6.6)
     transitivePeerDependencies:
       - '@types/node'
     optional: true
@@ -1329,7 +1332,7 @@ snapshots:
       '@oh-my-pi/omptype': 18.14.2
       '@oh-my-pi/pi-utils': 18.14.2
 
-  '@oh-my-pi/pi-coding-agent@18.14.2(@types/node@24.12.3)':
+  '@oh-my-pi/pi-coding-agent@18.14.2(@types/node@26.6.6)':
     dependencies:
       '@babel/parser': 7.29.12
       '@oh-my-pi/omp-stats': 18.14.2
@@ -1357,7 +1360,7 @@ snapshots:
       axe-core: 4.13.0
       puppeteer-core: 25.3.0
     optionalDependencies:
-      '@huggingface/transformers': 4.3.2(@types/node@24.12.3)
+      '@huggingface/transformers': 4.3.2(@types/node@26.6.6)
       sherpa-onnx-node: 1.13.2
     transitivePeerDependencies:
       - '@types/node'
@@ -1667,9 +1670,9 @@ snapshots:
 
   '@types/events@3.0.3': {}
 
-  '@types/node@24.12.3':
+  '@types/node@26.6.6':
     dependencies:
-      undici-types: 7.16.0
+      undici-types: 8.9.0
 
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260509.2':
     optional: true
@@ -1713,7 +1716,7 @@ snapshots:
 
   bun-types@1.4.4:
     dependencies:
-      '@types/node': 24.12.3
+      '@types/node': 26.6.6
       undici-types: 7.16.0
 
   chromium-bidi@16.0.1(devtools-protocol@0.0.1638949):
@@ -1884,7 +1887,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 24.12.3
+      '@types/node': 26.6.6
       long: 5.3.2
     optional: true
 
@@ -1919,7 +1922,7 @@ snapshots:
       type-fest: 0.20.2
     optional: true
 
-  sharp@0.35.5(@types/node@24.12.3):
+  sharp@0.35.5(@types/node@26.6.6):
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
@@ -1950,7 +1953,7 @@ snapshots:
       '@img/sharp-win32-arm64': 0.35.5
       '@img/sharp-win32-ia32': 0.35.5
       '@img/sharp-win32-x64': 0.35.5
-      '@types/node': 24.12.3
+      '@types/node': 26.6.6
     optional: true
 
   sherpa-onnx-darwin-arm64@1.13.8:
@@ -2009,6 +2012,8 @@ snapshots:
   typescript@5.9.3: {}
 
   undici-types@7.16.0: {}
+
+  undici-types@8.9.0: {}
 
   webdriver-bidi-protocol@0.4.2: {}
 
