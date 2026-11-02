@@ -49,7 +49,7 @@ export const startFakeDiscord = (socketPath: string) => {
 	const server = createServer((socket) => {
 		let buffer = Buffer.alloc(0);
 		socket.on("error", () => {});
-		socket.on("data", (chunk) => {
+		socket.on("data", (chunk: Buffer) => {
 			buffer = Buffer.concat([buffer, chunk]);
 			while (buffer.length >= 8) {
 				const op = buffer.readInt32LE(0);

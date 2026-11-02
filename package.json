@@ -33,7 +33,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint extensions scripts test",
     "test": "bun test",
     "sync-icons": "bun scripts/sync-model-icons.ts"
@@ -46,11 +46,10 @@
     "@oh-my-pi/pi-coding-agent": "^18.14.2",
     "@oh-my-pi/pi-utils": "^18.14.2",
     "@types/bun": "^1.4.4",
-    "@types/discord-rpc": "^4.0.10",
-    "@types/node": "^24.0.0",
-    "@typescript/native-preview": "7.0.0-dev.20260509.2",
-    "oxlint": "^1.63.0",
-    "typescript": "^5.9.0"
+    "@types/discord-rpc": "^4.0.11",
+    "@types/node": "^26.6.6",
+    "oxlint": "^1.90.0",
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "@oh-my-pi/pi-coding-agent": "*",
