@@ -193,8 +193,13 @@ describe("subagents", () => {
 
 			mark = activities.length;
 			await subs[2]!.emit("agent_end");
-			const done = await waitForActivity((a) => a !== null && a.party === undefined, { since: mark });
-			expect(done?.state).toStartWith("using tool · task");
+			// The party disappears while the main agent is still in the task tool. Scoped to this project so a stray
+			// frame from another session can't satisfy it; on timeout the error shows the last activity.
+			const name = dir.split("/").at(-1)!;
+			await waitForActivity(
+				(a) => a?.details?.endsWith(name) === true && a.party === undefined && a.state?.startsWith("using tool · task") === true,
+				{ since: mark },
+			);
 			removeDir(dir);
 		},
 		TIMEOUT,
