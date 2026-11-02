@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-02
+
+### Added
+
+- Automated tests (`pnpm test`, bun:test). They cover:
+  - GitHub remote parsing, model-logo matching and per-project setting precedence;
+  - the generated logo assets;
+  - behaviour end to end against a fake Discord: status flow, approval waiting, private-repo hiding, GitHub button and `hide`, live per-project overrides, the subagent party, presence off, and Tab completion.
+- CI on every push and pull request: typecheck, lint, tests and an `npm pack` dry run.
+- Release workflow: pushing a `vX.Y.Z` tag checks that it matches `package.json` and `CHANGELOG.md`, publishes to npm through trusted publishing (OIDC, with provenance), and creates the GitHub release from the changelog.
+
+### Changed
+
+- The settings file now lives in omp's active agent directory instead of always `~/.omp/agent`. Each `omp --profile` gets its own settings, and `PI_CODING_AGENT_DIR` is respected. The default profile's path is unchanged.
+
 ## [0.2.0] - 2026-11-02
 
 ### Added
@@ -38,6 +53,7 @@ First release on npm, ported from the pi `pi-discord-presence` extension to omp 
 - **`/discord-presence status`:** what Discord receives, the connection path, and why a logo or button is missing.
 - **WSL:** a bundled `npiperelay.exe` bridge, so no `socat` relay is needed. Sessions share one bridge, and another session takes it over when its owner exits.
 
-[Unreleased]: https://github.com/hiiruki/omp-discord-presence/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hiiruki/omp-discord-presence/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hiiruki/omp-discord-presence/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hiiruki/omp-discord-presence/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hiiruki/omp-discord-presence/releases/tag/v0.1.0
