@@ -67,7 +67,8 @@ Waiting never turns into `away`.
 
 When the project is a git repository whose `origin` remote points to a **public** GitHub repo, the status gets a **View on GitHub** button linking to it.
 
-- **When there's no button:** non-GitHub remotes, private repos and folders without git get none. Visibility is checked once per session with an anonymous GitHub API request, so a private repo's owner/name is never published.
+- **When there's no button:** non-GitHub remotes, private repos and folders without git get none. Visibility comes from an anonymous GitHub API request, so a private repo's owner/name is never published.
+- **Cached answer:** the last definite answer per repo is kept in `discord-presence-github.json` in omp's agent directory. The next session uses it right away, with no network wait, and asks GitHub again in the background. A known-public repo therefore keeps its name and button through a GitHub outage or rate limit (60 anonymous requests per hour). If a cached-public repo has turned private since, the name is replaced as soon as GitHub confirms it, about one request's time after the session starts.
 - **Hidden projects:** `/discord-presence hide` removes the button too.
 - **Your own view:** Discord never shows your own activity buttons to you. Other people see them on your profile.
 
@@ -75,8 +76,8 @@ When the project is a git repository whose `origin` remote points to a **public*
 
 When `origin` points to a **private** GitHub repo, the project name is replaced with `private project` on its own; no `/discord-presence hide` needed. The button is left out too. It works from the same anonymous GitHub check:
 
-- **Fails closed:** if the visibility can't be checked (offline, GitHub rate limit), the project is hidden too.
-- **No early leak:** nothing is sent to Discord until the check finishes, at most 5 seconds.
+- **Fails closed:** if the visibility can't be checked (offline, GitHub rate limit) and there is no cached answer, the project is hidden too.
+- **No early leak:** without a cached answer, nothing is sent to Discord until the check finishes, at most 5 seconds.
 - **Not covered:** origins that aren't recognizably GitHub, such as SSH host aliases like `git@github-work:owner/repo` or GitHub Enterprise hosts. Hide those with `/discord-presence hide`.
 - **To show a private repo's name anyway:** turn off **Auto-hide private repos** in `/discord-presence settings`. `/discord-presence show` says so when a project is auto-hidden.
 

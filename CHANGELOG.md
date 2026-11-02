@@ -6,7 +6,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- **Faster start, fewer requests:** GitHub repo visibility is cached per repo. A session in a known repo uses the cached answer right away and rechecks in the background.
 - **Smaller package:** the npm package is about 60% smaller (1.9 MB → 0.8 MB). The logo images are no longer shipped; the README's logo tables load them from GitHub.
+
+### Fixed
+
+- When GitHub was unreachable or rate-limited, a known-public repo was hidden as `private project` and lost its GitHub button.
 
 ## [0.4.0] - 2026-11-02
 

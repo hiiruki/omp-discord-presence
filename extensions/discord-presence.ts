@@ -280,8 +280,60 @@ const readGitBranch = async (cwd: string): Promise<string | undefined> => {
 	}
 };
 
-/** The public GitHub URL of cwd's `origin` remote, or why there is none. */
-const findPublicGithubRepo = async (cwd: string): Promise<RepoLookup> => {
+// Last definitive visibility per repo (true = public). A known-public repo stays public through a GitHub outage or
+// rate limit (otherwise auto-hide would fail closed), and sessions don't wait on the network. Revalidated on every
+// lookup; only a definitive answer (200 or 404) replaces it.
+const VISIBILITY_CACHE_FILE = join(getAgentDir(), "discord-presence-github.json");
+
+const readVisibilityCache = (): Record<string, boolean> => {
+	try {
+		const parsed: unknown = JSON.parse(readFileSync(VISIBILITY_CACHE_FILE, "utf8"));
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+		return Object.fromEntries(Object.entries(parsed).filter(([, isPublic]) => typeof isPublic === "boolean"));
+	} catch {
+		return {};
+	}
+};
+
+const writeVisibility = (slug: string, isPublic: boolean) => {
+	try {
+		const cache = readVisibilityCache();
+		if (cache[slug] === isPublic) return;
+		cache[slug] = isPublic;
+		const tmp = `${VISIBILITY_CACHE_FILE}.${process.pid}.tmp`;
+		writeFileSync(tmp, `${JSON.stringify(cache, null, 2)}\n`);
+		renameSync(tmp, VISIBILITY_CACHE_FILE);
+	} catch {
+		// A cache we can't write only costs the next session a network round trip.
+	}
+};
+
+const githubLookup = (slug: string, isPublic: boolean): RepoLookup =>
+	isPublic ? { url: `https://github.com/${slug}`, slug } : { reason: "private GitHub repo", mayBePrivate: true };
+
+/** Asks GitHub anonymously; a non-definitive answer comes back as a reason. Never rejects. */
+const fetchVisibility = async (slug: string): Promise<{ isPublic: boolean } | { reason: string }> => {
+	try {
+		// Only link public repos: a private repo's URL would leak its owner/name to everyone viewing the profile.
+		const response = await fetch(`https://api.github.com/repos/${slug}`, {
+			headers: { "User-Agent": "omp-discord-presence" },
+			signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+		});
+		if (response.ok) return { isPublic: true };
+		if (response.status === 404) return { isPublic: false };
+		return { reason: `GitHub API HTTP ${response.status}, visibility unknown` };
+	} catch {
+		return { reason: "GitHub API unreachable, visibility unknown" };
+	}
+};
+
+/**
+ * The public GitHub URL of cwd's `origin` remote, or why there is none. With a cached answer, `lookup` is that answer
+ * (no network wait) and `revalidated` resolves to a changed definitive answer, or undefined when nothing changed.
+ */
+const findPublicGithubRepo = async (
+	cwd: string,
+): Promise<{ lookup: RepoLookup; revalidated?: Promise<RepoLookup | undefined> }> => {
 	let slug: string | undefined;
 	try {
 		const { stdout } = await execFileAsync("git", ["-C", cwd, "remote", "get-url", "origin"], {
@@ -289,23 +341,26 @@ const findPublicGithubRepo = async (cwd: string): Promise<RepoLookup> => {
 		});
 		slug = GITHUB_REMOTE.exec(stdout.trim())?.[1];
 	} catch {
-		return { reason: "no git origin remote" };
+		return { lookup: { reason: "no git origin remote" } };
 	}
 	// shortcut: ssh host aliases (git@github-work:owner/repo) aren't recognized; resolve them via `ssh -G` if users need it.
-	if (!slug) return { reason: "origin is not on GitHub" };
-	try {
-		// Only link public repos: a private repo's URL would leak its owner/name to everyone viewing the profile.
-		const response = await fetch(`https://api.github.com/repos/${slug}`, {
-			headers: { "User-Agent": "omp-discord-presence" },
-			signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
-		});
-		if (response.ok) return { url: `https://github.com/${slug}`, slug };
-		return response.status === 404
-			? { reason: "private GitHub repo", mayBePrivate: true }
-			: { reason: `GitHub API HTTP ${response.status}, visibility unknown`, mayBePrivate: true };
-	} catch {
-		return { reason: "GitHub API unreachable, visibility unknown", mayBePrivate: true };
+	if (!slug) return { lookup: { reason: "origin is not on GitHub" } };
+	const repoSlug = slug;
+	const cached = readVisibilityCache()[repoSlug];
+	const live = fetchVisibility(repoSlug).then((result) => {
+		if ("isPublic" in result) writeVisibility(repoSlug, result.isPublic);
+		return result;
+	});
+	if (cached === undefined) {
+		const result = await live;
+		return { lookup: "isPublic" in result ? githubLookup(repoSlug, result.isPublic) : { reason: result.reason, mayBePrivate: true } };
 	}
+	return {
+		lookup: githubLookup(repoSlug, cached),
+		revalidated: live.then((result) =>
+			"isPublic" in result && result.isPublic !== cached ? githubLookup(repoSlug, result.isPublic) : undefined,
+		),
+	};
 };
 
 /** Asset keys uploaded to the Discord application; undefined when Discord can't be reached. */
@@ -430,6 +485,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let repo: RepoLookup = { reason: "not checked yet" };
 	// Flushes wait for the repo check, so a private repo's name is never sent before it is known to be private.
 	let repoCheck: Promise<unknown> = Promise.resolve();
+	let repoLookupId = 0;
 	let lastActivity: DiscordRPC.Presence | undefined;
 	let idleSince: number | undefined;
 	let wslBridge: Server | undefined;
@@ -981,9 +1037,19 @@ export default function discordPresence(pi: ExtensionAPI) {
 			updatePresence({ model });
 		}, MODEL_POLL_MS);
 		repo = { reason: "checking GitHub" };
+		const lookupId = ++repoLookupId; // a later session_start (session switch) supersedes this lookup
 		repoCheck = Promise.all([
-			findPublicGithubRepo(ctx.cwd).then((lookup) => {
+			findPublicGithubRepo(ctx.cwd).then(({ lookup, revalidated }) => {
+				if (lookupId !== repoLookupId) return;
 				repo = lookup;
+				// A cached answer was used; apply GitHub's fresh one if the repo changed visibility since.
+				revalidated
+					?.then((fresh) => {
+						if (!fresh || lookupId !== repoLookupId) return;
+						repo = fresh;
+						schedulePresenceUpdate();
+					})
+					.catch(() => {});
 			}),
 			refreshBranch(),
 		]).then(schedulePresenceUpdate);

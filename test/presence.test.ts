@@ -15,6 +15,7 @@ import {
 // Activity updates are spaced 4 s apart (Discord's rate limit), so each step can take that long.
 const TIMEOUT = 40_000;
 const STATE_FILE = join(getAgentDir(), "discord-presence-state.json");
+const VISIBILITY_CACHE = join(getAgentDir(), "discord-presence-github.json");
 
 let cleanups: (() => unknown)[] = [];
 const track = <T extends { shutdown: () => unknown }>(session: T) => {
@@ -24,6 +25,7 @@ const track = <T extends { shutdown: () => unknown }>(session: T) => {
 
 beforeEach(() => {
 	rmSync(STATE_FILE, { force: true });
+	rmSync(VISIBILITY_CACHE, { force: true });
 	githubRepos.clear();
 	activities.length = 0; // each test only sees activities sent during it
 });
@@ -131,6 +133,44 @@ describe("privacy", () => {
 			mark = activities.length;
 			await session.run("hide");
 			const hidden = await waitForActivity((a) => a?.details?.endsWith("private project") === true, { since: mark });
+			expect(hidden?.buttons).toBeUndefined();
+			removeDir(dir);
+		},
+		TIMEOUT,
+	);
+
+	test(
+		"a repo known to be public keeps its name and button when GitHub can't be asked",
+		async () => {
+			const dir = githubRepo("acme/known-public");
+			const first = await startSession({ cwd: dir });
+			await waitForActivity((a) => a?.details?.endsWith("· known-public") === true);
+			await first.shutdown();
+
+			// Rate-limited: without the cached answer, auto-hide would fail closed to "private project".
+			githubRepos.set("acme/known-public", 403);
+			const mark = activities.length;
+			track(await startSession({ cwd: dir }));
+			const shown = await waitForActivity((a) => a?.details !== undefined, { since: mark });
+			expect(shown?.details).toMatch(/· known-public$/);
+			expect(shown?.buttons).toHaveLength(1);
+			removeDir(dir);
+		},
+		TIMEOUT,
+	);
+
+	test(
+		"a cached public repo that turned private is hidden once GitHub confirms it",
+		async () => {
+			const dir = githubRepo("acme/went-private");
+			const first = await startSession({ cwd: dir });
+			await waitForActivity((a) => a?.details?.endsWith("· went-private") === true);
+			await first.shutdown();
+
+			githubRepos.set("acme/went-private", 404);
+			const mark = activities.length;
+			track(await startSession({ cwd: dir }));
+			const hidden = await waitForActivity((a) => a?.details?.endsWith("· private project") === true, { since: mark });
 			expect(hidden?.buttons).toBeUndefined();
 			removeDir(dir);
 		},
