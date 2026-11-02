@@ -97,7 +97,15 @@ const DEFAULT_STATE: GlobalState = {
 
 type DiscordRpcClient = DiscordRPC.Client & {
 	clearActivity?: () => Promise<void> | void;
-	destroy?: () => void;
+	destroy?: () => Promise<void>;
+};
+
+/**
+ * Closes a discord-rpc client without waiting. destroy() resolves only once Discord closes the pipe, and rejects
+ * when the socket never opened; unhandled, that rejection would crash the whole omp process.
+ */
+const closeClient = (client: DiscordRpcClient | undefined) => {
+	client?.destroy?.().catch(() => {});
 };
 
 const truncateDiscordText = (value: string): string => {
@@ -535,11 +543,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 		} catch {
 			connected = false;
 			// A timed-out login leaves its socket (and on WSL a relay process) open; close it before retrying.
-			try {
-				rpc?.destroy?.();
-			} catch {
-				// Ignore cleanup errors.
-			}
+			closeClient(rpc);
 			rpc = undefined;
 			scheduleReconnect();
 		}
@@ -556,11 +560,7 @@ export default function discordPresence(pi: ExtensionAPI) {
 			// Discord may already be closed; ignore cleanup errors.
 		}
 
-		try {
-			rpc?.destroy?.();
-		} catch {
-			// Ignore cleanup errors.
-		}
+		closeClient(rpc);
 
 		rpc = undefined;
 	};

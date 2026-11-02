@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - The settings file now lives in omp's active agent directory instead of always `~/.omp/agent`. Each `omp --profile` gets its own settings, and `PI_CODING_AGENT_DIR` is respected. The default profile's path is unchanged.
 
+### Fixed
+
+- Closing the Discord connection before it had opened (a session that exits right after starting, or a login that times out) could raise an unhandled rejection, which omp treats as fatal. Found by the new CI run.
+
 ## [0.2.0] - 2026-11-02
 
 ### Added
