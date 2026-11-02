@@ -394,7 +394,9 @@ const fetchUploadedAssets = async (): Promise<Set<string> | undefined> => {
 
 const formatDuration = (ms: number): string => {
 	const seconds = Math.round(ms / 1000); // round once so "14m 60s" can't happen
-	return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+	if (seconds < 60) return `${seconds}s`;
+	if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+	return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 };
 
 // WSL: Discord runs on Windows and only exposes a named pipe, so serve the Unix socket the IPC client looks for

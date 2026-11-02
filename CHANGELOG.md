@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- `/discord-presence status` showed long idle times in minutes (`cleared in 120m 0s`); they now read in hours (`2h 0m`).
+
 ## [0.5.0] - 2026-11-02
 
 ### Added

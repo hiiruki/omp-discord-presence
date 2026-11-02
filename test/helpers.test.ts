@@ -97,6 +97,9 @@ describe("durations", () => {
 		[59_600, "1m 0s"],
 		[899_700, "15m 0s"],
 		[125_400, "2m 5s"],
+		[3_599_600, "1h 0m"],
+		[5_430_000, "1h 30m"],
+		[7_200_000, "2h 0m"],
 	])("%d ms -> %s", (ms, text) => {
 		expect(formatDuration(ms)).toBe(text);
 	});
