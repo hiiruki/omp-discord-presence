@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-02
+
 ### Changed
 
 - **Faster start, fewer requests:** GitHub repo visibility is cached per repo. A session in a known repo uses the cached answer right away and rechecks in the background.
@@ -74,7 +76,8 @@ First release on npm, ported from the pi `pi-discord-presence` extension to omp 
 - **`/discord-presence status`:** what Discord receives, the connection path, and why a logo or button is missing.
 - **WSL:** a bundled `npiperelay.exe` bridge, so no `socat` relay is needed. Sessions share one bridge, and another session takes it over when its owner exits.
 
-[Unreleased]: https://github.com/hiiruki/omp-discord-presence/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/hiiruki/omp-discord-presence/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/hiiruki/omp-discord-presence/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/hiiruki/omp-discord-presence/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hiiruki/omp-discord-presence/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hiiruki/omp-discord-presence/compare/v0.1.0...v0.2.0

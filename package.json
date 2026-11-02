@@ -1,7 +1,7 @@
 {
   "name": "omp-discord-presence",
   "packageManager": "pnpm@12.16.1",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Discord Rich Presence for omp (oh-my-pi): live status, model logos, GitHub button, subagent party and privacy controls. Works on Windows, macOS, Linux and WSL.",
   "author": "Hiiruki",
   "type": "module",
