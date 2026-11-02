@@ -415,9 +415,11 @@ With `omp --profile <name>`, that is the profile's agent directory (`~/.omp/prof
 
 ## Development
 
+The development and release conventions are in [AGENTS.md](AGENTS.md): tooling, code rules, tests, commit format, changelog, versioning and the release steps. omp and other coding agents load it automatically.
+
 ```bash
 pnpm install
-pnpm typecheck   # tsgo
+pnpm typecheck   # tsc (TypeScript 7)
 pnpm lint        # oxlint
 pnpm test        # bun test, about 30 s
 omp -e .         # try the checkout in a real omp session
