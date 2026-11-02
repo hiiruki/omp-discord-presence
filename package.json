@@ -50,7 +50,7 @@
     "@types/node": "^24.0.0",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "oxlint": "^1.63.0",
-    "typescript": "^5.9.0"
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "@oh-my-pi/pi-coding-agent": "*",
