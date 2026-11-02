@@ -1,21 +1,11 @@
-<!-- Thank you for opening a PR and making this theme even better, I appreciate you taking the time to help out 🙌 -->
+## What and why
 
-#### What kind of changes does this PR include?
+<!-- One or two sentences. Link the issue if there is one: Closes #123 -->
 
-<!-- Delete any that don’t apply -->
+## Checklist
 
-- Minor fixes (broken links, typos, css, etc.)
-- Changes with larger consequences (logic, library updates, etc.)
-- Something else!
-
-#### Description
-
-- Closes # <!-- Add an issue number if this PR will close it. -->
-- What does this PR change? A brief description would be great.
-- Did you change something visual? A before/after screenshot can be helpful.
-
-<!--
-Here’s what will happen next:
-Hopefully I'll get time soon after your pull request to take a look and may ask you to make changes.
-I'll try to be responsive, but don’t worry if this takes a week or 2.
--->
+- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass locally
+- [ ] Tried in a real omp session (`omp -e .`) when behaviour changed
+- [ ] `CHANGELOG.md` has an entry under `## [Unreleased]` (skip for docs/CI-only changes)
+- [ ] README updated if commands, settings or what Discord shows changed
+- [ ] Nothing private reaches Discord that didn't before (project names of hidden/private repos, goal text, plan paths, approval reasons, errors)

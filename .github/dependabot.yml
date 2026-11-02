@@ -1,22 +1,33 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-
+# Dependency updates, checked weekly. Every PR runs CI (typecheck, lint, tests); merge when it's green.
+# Majors stay ungrouped, one PR per package, so a breaking update can't hold back the rest.
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+    commit-message:
+      prefix: ci
     groups:
-      actions-deps:
-        patterns:
-          - "*"
-  - package-ecosystem: "npm" # See documentation for possible values
-    directory: "/" # Location of package manifests
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm # pnpm-lock.yaml is updated too
+    directory: /
     schedule:
-      interval: "monthly"
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
     groups:
-      patch-minor:
-        update-types: ["patch", "minor"]
+      # omp's packages are released together and must move in lockstep.
+      omp:
+        patterns: ["@oh-my-pi/*"]
+      # Types, linter and compiler: patch and minor updates land together.
+      dev-tooling:
+        dependency-type: development
+        exclude-patterns: ["@oh-my-pi/*"]
+        update-types: [minor, patch]
+      runtime:
+        dependency-type: production
+        update-types: [minor, patch]
