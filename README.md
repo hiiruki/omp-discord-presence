@@ -225,9 +225,10 @@ Inside omp:
 
 ```text
 ╭─ Discord presence settings ─────────────────────────╮
-│  ❯ Presence: on                                     │
-│      Show omp activity on Discord (all sessions)    │
+│  ❯ Editing: all projects                            │
+│      Enter switches between global defaults and…    │
 │    This project: visible                            │
+│    Presence: on                                     │
 │    Auto-hide private repos: on                      │
 │    Model, effort & logo: shown                      │
 │    GitHub button: shown                             │
@@ -249,7 +250,30 @@ Inside omp:
 | Context usage | hidden | Append `context N%`. |
 | Away after | 15 min | Idle time before `away`: 5, 10, 15, 30 or 60 minutes, or never. |
 
-Every change is saved globally and applied live to all running sessions. Outside the TUI (print, RPC), `settings` points to the settings file instead.
+Every change is saved and applied live to all running sessions. Outside the TUI (print, RPC), `settings` points to the settings file instead.
+
+#### Per-project settings
+
+Press Enter on **Editing** to switch from the global defaults to **this project**. There, the display settings can be overridden for the current project and its subdirectories, e.g. no GitHub button and no model in a work repo, while other projects keep the global values:
+
+```text
+╭─ Discord presence settings ─────────────────────────╮
+│  ❯ Editing: this project (work-repo)                │
+│    This project: visible                            │
+│    Model, effort & logo: hidden · this project      │
+│    GitHub button: hidden · this project             │
+│    Git branch: shown · this project                 │
+│    Context usage: hidden · global                   │
+│    Reset this project to the global settings        │
+│    Done                                             │
+╰─────────────────────────────────────────────────────╯
+```
+
+- **Which settings:** Model, effort & logo; GitHub button; Git branch; Context usage. Presence, auto-hide and the away time stay global.
+- **`· global` / `· this project`:** whether the row follows the global value or is overridden here. Enter flips an overridden row back to the global value.
+- **Subdirectories:** a session in a subdirectory uses the overrides of the closest project above it.
+- **Reset:** **Reset this project to the global settings** removes all of the project's overrides.
+- **Status report:** `/discord-presence status` lists the overrides in force.
 
 ### Status report
 
@@ -266,8 +290,9 @@ Sent to Discord:
   button: View on GitHub → https://github.com/hiiruki/omp-discord-presence
   last update 9s ago
 
-Project: omp-discord-presence · visible
+Project: omp-discord-presence · visible · branch hidden
 Context: hidden (now 2%) · idle 10s, away in 14m 50s
+Project overrides: none
 Settings: /home/me/.omp/agent/discord-presence-state.json
 ```
 
@@ -281,7 +306,7 @@ Settings: /home/me/.omp/agent/discord-presence-state.json
 
 `hide` replaces the project name with `private project` on Discord. It applies to the current directory and everything below it, so a session started in a subdirectory of a hidden project stays hidden. `show` removes every hidden entry that covers the current directory.
 
-All settings and the hidden project list are global across omp projects and sessions, and changes apply live to every running session. They are stored at:
+All settings, per-project overrides and the hidden project list are shared by every omp session, and changes apply live to every running session. They are stored at:
 
 ```text
 ~/.omp/agent/discord-presence-state.json
@@ -296,7 +321,10 @@ All settings and the hidden project list are global across omp projects and sess
   "showButton": true,
   "awayMinutes": 15,
   "autoHidePrivate": true,
-  "showBranch": false
+  "showBranch": false,
+  "projects": {
+    "/home/me/work/client-app": { "showModel": false, "showButton": false }
+  }
 }
 ```
 

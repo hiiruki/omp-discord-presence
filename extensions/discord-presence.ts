@@ -73,7 +73,14 @@ type GlobalState = {
 	autoHidePrivate: boolean;
 	/** Opt-in: append the current git branch to the project name. */
 	showBranch: boolean;
+	/** Per-project overrides of the display settings, keyed by absolute path (subdirectories included). */
+	projects: Record<string, ProjectOverrides>;
 };
+
+/** Display settings a project can override; anything else is global only. */
+const PROJECT_SETTINGS = ["showModel", "showButton", "showBranch", "showContext"] as const;
+type ProjectSetting = (typeof PROJECT_SETTINGS)[number];
+type ProjectOverrides = Partial<Record<ProjectSetting, boolean>>;
 
 const DEFAULT_STATE: GlobalState = {
 	enabled: true,
@@ -84,6 +91,7 @@ const DEFAULT_STATE: GlobalState = {
 	awayMinutes: 15,
 	autoHidePrivate: true,
 	showBranch: false,
+	projects: {},
 };
 
 type DiscordRpcClient = DiscordRPC.Client & {
@@ -101,8 +109,41 @@ const normalizeProjectName = (cwd: string): string => {
 	return parts.at(-1) ?? "omp session";
 };
 
+const coversPath = (cwd: string, project: string) =>
+	cwd === project || cwd.startsWith(project.endsWith(sep) ? project : project + sep);
+
 const isProjectHidden = (cwd: string, hiddenProjects: string[]): boolean =>
-	hiddenProjects.some((project) => cwd === project || cwd.startsWith(project.endsWith(sep) ? project : project + sep));
+	hiddenProjects.some((project) => coversPath(cwd, project));
+
+/** The overrides entry for cwd: the deepest project path that covers it. */
+const projectKeyFor = (cwd: string, projects: GlobalState["projects"]): string | undefined =>
+	Object.keys(projects)
+		.filter((project) => coversPath(cwd, project))
+		.sort((a, b) => b.length - a.length)[0];
+
+/** Display settings in force for cwd: the global value unless the project overrides it. */
+const effectiveSettings = (state: GlobalState, cwd: string): Record<ProjectSetting, boolean> => {
+	const key = projectKeyFor(cwd, state.projects);
+	const overrides = key ? state.projects[key] : undefined;
+	return Object.fromEntries(
+		PROJECT_SETTINGS.map((setting) => [setting, overrides?.[setting] ?? state[setting]]),
+	) as Record<ProjectSetting, boolean>;
+};
+
+const parseProjects = (value: unknown): GlobalState["projects"] => {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+	const projects: GlobalState["projects"] = {};
+	for (const [path, raw] of Object.entries(value)) {
+		if (!raw || typeof raw !== "object") continue;
+		const overrides: ProjectOverrides = {};
+		for (const setting of PROJECT_SETTINGS) {
+			const flag = (raw as Record<string, unknown>)[setting];
+			if (typeof flag === "boolean") overrides[setting] = flag;
+		}
+		if (Object.keys(overrides).length > 0) projects[path] = overrides;
+	}
+	return projects;
+};
 
 const readGlobalState = (): GlobalState => {
 	try {
@@ -118,6 +159,7 @@ const readGlobalState = (): GlobalState => {
 			showButton: parsed.showButton !== false,
 			autoHidePrivate: parsed.autoHidePrivate !== false,
 			showBranch: parsed.showBranch === true,
+			projects: parseProjects(parsed.projects),
 			awayMinutes:
 				typeof awayMinutes === "number" && Number.isFinite(awayMinutes) && awayMinutes >= 0
 					? awayMinutes
@@ -328,8 +370,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 	let modes = ""; // formatted active omp modes, see formatModes
 	let stateWatcher: FSWatcher | undefined;
 	let shuttingDown = false;
-	let { enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes, autoHidePrivate, showBranch } =
-		readGlobalState();
+	const initial = readGlobalState();
+	let { enabled, hiddenProjects, awayMinutes, autoHidePrivate } = initial;
+	// Display settings in force for cwd: global values with this project's overrides applied.
+	let { showContext, showModel, showButton, showBranch } = effectiveSettings(initial, process.cwd());
+	let projectOverrides: ProjectOverrides = {};
 	let branch: string | undefined;
 	let cwd = process.cwd();
 
@@ -501,14 +546,18 @@ export default function discordPresence(pi: ExtensionAPI) {
 	const applyGlobalState = async (next: GlobalState) => {
 		const wasHidden = projectHidden();
 		hiddenProjects = next.hiddenProjects;
+		const effective = effectiveSettings(next, cwd);
+		const key = projectKeyFor(cwd, next.projects);
+		projectOverrides = key ? next.projects[key]! : {};
 		const displayChanged =
-			showContext !== next.showContext ||
-			showModel !== next.showModel ||
-			showButton !== next.showButton ||
+			showContext !== effective.showContext ||
+			showModel !== effective.showModel ||
+			showButton !== effective.showButton ||
 			autoHidePrivate !== next.autoHidePrivate ||
-			showBranch !== next.showBranch;
-		if (next.showBranch && !showBranch) branch = await readGitBranch(cwd); // read before the flush below
-		({ showContext, showModel, showButton, autoHidePrivate, showBranch } = next);
+			showBranch !== effective.showBranch;
+		if (effective.showBranch && !showBranch) branch = await readGitBranch(cwd); // read before the flush below
+		({ showContext, showModel, showButton, showBranch } = effective);
+		autoHidePrivate = next.autoHidePrivate;
 		if (awayMinutes !== next.awayMinutes) {
 			awayMinutes = next.awayMinutes;
 			armAwayTimer();
@@ -587,6 +636,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 			"",
 			`Project: ${normalizeProjectName(cwd)} · ${isProjectHidden(cwd, hiddenProjects) ? "hidden" : autoHidden() ? `hidden automatically (${"reason" in repo ? repo.reason : ""})` : "visible"} · branch ${showBranch ? (branch ?? "none (not a git repo)") : "hidden"}`,
 			`Context: ${showContext ? "shown" : "hidden"}${context === undefined ? "" : ` (now ${context}%)`} · ${away}`,
+			`Project overrides: ${
+				Object.entries(projectOverrides)
+					.map(([setting, on]) => `${SETTING_LABELS[setting as ProjectSetting][0]} ${on ? "shown" : "hidden"}`)
+					.join(", ") || "none"
+			}`,
 			`Settings: ${GLOBAL_STATE_FILE}`,
 		]
 			.filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
@@ -604,54 +658,123 @@ export default function discordPresence(pi: ExtensionAPI) {
 	const AWAY_CHOICES = [5, 10, 15, 30, 60, 0];
 	const describeAway = (minutes: number) => (minutes > 0 ? `${minutes} min` : "never");
 
-	/** Interactive settings menu; every change is saved globally and applied live to all sessions. */
+	const SETTING_LABELS: Record<ProjectSetting, [label: string, description: string]> = {
+		showModel: ["Model, effort & logo", "e.g. anthropic/claude-opus · effort: high"],
+		showButton: ["GitHub button", "View on GitHub, public repos only"],
+		showBranch: ["Git branch", "e.g. my-project @ main"],
+		showContext: ["Context usage", "e.g. context 42%"],
+	};
+
+	/** Sets or clears (`undefined`) one override of the project at `key`; empty entries are dropped. */
+	const writeProjectOverride = async (key: string, setting: ProjectSetting, value: boolean | undefined) => {
+		const { projects } = readGlobalState();
+		const overrides: ProjectOverrides = { ...projects[key], [setting]: value };
+		if (value === undefined) delete overrides[setting];
+		const next = { ...projects, [key]: overrides };
+		if (Object.keys(overrides).length === 0) delete next[key];
+		await applyGlobalState(writeGlobalState({ projects: next }));
+	};
+
+	type MenuItem = { label: string; description?: string; run?: () => Promise<void> | void };
+
+	/**
+	 * Interactive settings menu; every change is saved and applied live to all sessions. The first row switches
+	 * between editing the global defaults and overriding them for this project (and its subdirectories).
+	 */
 	const openSettings = async (ctx: ExtensionContext) => {
 		const toggle = (on: boolean, yes = "shown", no = "hidden") => (on ? yes : no);
+		let projectScope = false;
 		let index = 0;
 		for (;;) {
 			const state = readGlobalState();
+			const name = normalizeProjectName(ctx.cwd);
 			const hidden = isProjectHidden(ctx.cwd, state.hiddenProjects);
-			const items = [
-				{ label: `Presence: ${toggle(state.enabled, "on", "off")}`, description: "Show omp activity on Discord (all sessions)" },
+			// Overrides are written under the entry that already covers cwd, else under cwd itself.
+			const key = projectKeyFor(ctx.cwd, state.projects) ?? ctx.cwd;
+			const overrides = state.projects[key] ?? {};
+			const items: MenuItem[] = [
+				{
+					label: `Editing: ${projectScope ? `this project (${name})` : "all projects"}`,
+					description: "Enter switches between global defaults and this project's overrides",
+					run: () => {
+						projectScope = !projectScope;
+					},
+				},
 				{
 					label: `This project: ${hidden ? "hidden" : autoHidden() ? "hidden (private repo)" : "visible"}`,
-					description: `Show "${normalizeProjectName(ctx.cwd)}" or "${PRIVATE_PROJECT_LABEL}"`,
+					description: `Show "${name}" or "${PRIVATE_PROJECT_LABEL}"`,
+					run: async () => {
+						if (!hidden && autoHidden()) ctx.ui.notify(SHOW_PRIVATE_HINT, "warning");
+						else await setProjectHidden(ctx.cwd, !hidden);
+					},
 				},
-				{
-					label: `Auto-hide private repos: ${toggle(state.autoHidePrivate, "on", "off")}`,
-					description: `"${PRIVATE_PROJECT_LABEL}" when origin is a private GitHub repo`,
-				},
-				{ label: `Model, effort & logo: ${toggle(state.showModel)}`, description: "e.g. anthropic/claude-opus · effort: high" },
-				{ label: `GitHub button: ${toggle(state.showButton)}`, description: "View on GitHub, public repos only" },
-				{ label: `Git branch: ${toggle(state.showBranch)}`, description: "e.g. my-project @ main" },
-				{ label: `Context usage: ${toggle(state.showContext)}`, description: "e.g. context 42%" },
-				{ label: `Away after: ${describeAway(state.awayMinutes)}`, description: "Idle time before the status turns away" },
-				{ label: "Done" },
 			];
-			const choice = await ctx.ui.select("Discord presence settings", items, {
-				initialIndex: index,
-				helpText: "Enter changes the setting · Esc closes",
-			});
-			index = items.findIndex((item) => item.label === choice);
-			if (index === -1 || index === items.length - 1) return;
-
-			if (index === 0) await applyGlobalState(writeGlobalState({ enabled: !state.enabled }));
-			else if (index === 1) {
-				if (!hidden && autoHidden()) ctx.ui.notify(SHOW_PRIVATE_HINT, "warning");
-				else await setProjectHidden(ctx.cwd, !hidden);
-			} else if (index === 2) await applyGlobalState(writeGlobalState({ autoHidePrivate: !state.autoHidePrivate }));
-			else if (index === 3) await applyGlobalState(writeGlobalState({ showModel: !state.showModel }));
-			else if (index === 4) await applyGlobalState(writeGlobalState({ showButton: !state.showButton }));
-			else if (index === 5) await applyGlobalState(writeGlobalState({ showBranch: !state.showBranch }));
-			else if (index === 6) await applyGlobalState(writeGlobalState({ showContext: !state.showContext }));
-			else {
-				const labels = AWAY_CHOICES.map((minutes) => describeAway(minutes) + (minutes === DEFAULT_STATE.awayMinutes ? " (default)" : ""));
-				const picked = await ctx.ui.select("Away after", labels, {
-					initialIndex: Math.max(0, AWAY_CHOICES.indexOf(state.awayMinutes)),
-				});
-				const minutes = AWAY_CHOICES[labels.indexOf(picked ?? "")];
-				if (minutes !== undefined) await applyGlobalState(writeGlobalState({ awayMinutes: minutes }));
+			if (projectScope) {
+				for (const setting of PROJECT_SETTINGS) {
+					const [label, description] = SETTING_LABELS[setting];
+					const own = overrides[setting];
+					items.push({
+						label: `${label}: ${toggle(own ?? state[setting])} · ${own === undefined ? "global" : "this project"}`,
+						description,
+						// Two states: follow the global value, or override it with the opposite.
+						run: () => writeProjectOverride(key, setting, own === undefined ? !state[setting] : undefined),
+					});
+				}
+				if (Object.keys(overrides).length > 0) {
+					items.push({
+						label: "Reset this project to the global settings",
+						run: async () => {
+							const { projects } = readGlobalState();
+							delete projects[key];
+							await applyGlobalState(writeGlobalState({ projects }));
+						},
+					});
+				}
+			} else {
+				items.push(
+					{
+						label: `Presence: ${toggle(state.enabled, "on", "off")}`,
+						description: "Show omp activity on Discord (all sessions)",
+						run: async () => void (await applyGlobalState(writeGlobalState({ enabled: !state.enabled }))),
+					},
+					{
+						label: `Auto-hide private repos: ${toggle(state.autoHidePrivate, "on", "off")}`,
+						description: `"${PRIVATE_PROJECT_LABEL}" when origin is a private GitHub repo`,
+						run: async () => void (await applyGlobalState(writeGlobalState({ autoHidePrivate: !state.autoHidePrivate }))),
+					},
+					...PROJECT_SETTINGS.map((setting) => ({
+						label: `${SETTING_LABELS[setting][0]}: ${toggle(state[setting])}`,
+						description: SETTING_LABELS[setting][1],
+						run: async () => void (await applyGlobalState(writeGlobalState({ [setting]: !state[setting] }))),
+					})),
+					{
+						label: `Away after: ${describeAway(state.awayMinutes)}`,
+						description: "Idle time before the status turns away",
+						run: async () => {
+							const labels = AWAY_CHOICES.map(
+								(minutes) => describeAway(minutes) + (minutes === DEFAULT_STATE.awayMinutes ? " (default)" : ""),
+							);
+							const picked = await ctx.ui.select("Away after", labels, {
+								initialIndex: Math.max(0, AWAY_CHOICES.indexOf(state.awayMinutes)),
+							});
+							const minutes = AWAY_CHOICES[labels.indexOf(picked ?? "")];
+							if (minutes !== undefined) await applyGlobalState(writeGlobalState({ awayMinutes: minutes }));
+						},
+					},
+				);
 			}
+			items.push({ label: "Done" });
+
+			const choice = await ctx.ui.select("Discord presence settings", items, {
+				initialIndex: Math.min(index, items.length - 1),
+				helpText: projectScope
+					? "Enter overrides a setting for this project, or returns it to the global value · Esc closes"
+					: "Enter changes the setting · Esc closes",
+			});
+			const picked = items.find((item) => item.label === choice);
+			if (!picked?.run) return; // Esc or Done
+			index = items.indexOf(picked);
+			await picked.run();
 		}
 	};
 
@@ -720,8 +843,11 @@ export default function discordPresence(pi: ExtensionAPI) {
 		shuttingDown = false;
 		cwd = ctx.cwd;
 		watchGlobalState();
-		({ enabled, hiddenProjects, showContext, showModel, showButton, awayMinutes, autoHidePrivate, showBranch } =
-			readGlobalState());
+		const state = readGlobalState();
+		({ enabled, hiddenProjects, awayMinutes, autoHidePrivate } = state);
+		({ showContext, showModel, showButton, showBranch } = effectiveSettings(state, cwd));
+		const key = projectKeyFor(cwd, state.projects);
+		projectOverrides = key ? state.projects[key]! : {};
 		updatePresence({
 			status: "idle",
 			model: ctx.model,
